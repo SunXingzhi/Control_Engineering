@@ -61,6 +61,12 @@ void Error_Handler(void);
 #define MOTOR_DIR_PIN_GPIO_Port GPIOB
 #define MOTOR_STEP_PIN_Pin GPIO_PIN_6
 #define MOTOR_STEP_PIN_GPIO_Port GPIOB
+#define MOTOR_MS1_PIN_Pin GPIO_PIN_7
+#define MOTOR_MS1_PIN_GPIO_Port GPIOB
+#define MOTOR_MS2_PIN_Pin GPIO_PIN_8
+#define MOTOR_MS2_PIN_GPIO_Port GPIOB
+#define MOTOR_MS3_PIN_Pin GPIO_PIN_9
+#define MOTOR_MS3_PIN_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
 

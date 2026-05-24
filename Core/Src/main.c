@@ -23,7 +23,8 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include  "driver_step_motor.h"
+#include "driver_step_motor.h"
+#include "test_step_motor.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -88,57 +89,51 @@ int main(void)
 	MX_GPIO_Init();
 	MX_TIM4_Init();
 	/* USER CODE BEGIN 2 */
-	// HAL_TIM_Base_Start_IT(&htim4);
 	step_motor_t motor = {
 		HR4988,
 		{
-			.dir_gpio_pin	= GPIO_PIN_5, /* PB5 作为 DIR 引脚, 不与 PB6 (TIM4_CH1) 冲突 */
-			.dir_gpio_port	= GPIOB,
-			.step_gpio_port	= MOTOR_STEP_PIN_GPIO_Port,
-			.step_gpio_pin	= MOTOR_STEP_PIN_Pin,
-			.tim_handle	= &htim4,
-			.tim_channel	= TIM_CHANNEL_1
+			.dir_gpio_pin = GPIO_PIN_5,
+			.dir_gpio_port = GPIOB,
+			.step_gpio_port = MOTOR_STEP_PIN_GPIO_Port,
+			.step_gpio_pin = MOTOR_STEP_PIN_Pin,
+			.ms1_gpio_port = MOTOR_MS1_PIN_GPIO_Port,
+			.ms1_gpio_pin = MOTOR_MS1_PIN_Pin,
+			.ms2_gpio_port = MOTOR_MS2_PIN_GPIO_Port,
+			.ms2_gpio_pin = MOTOR_MS2_PIN_Pin,
+			.ms3_gpio_port = MOTOR_MS3_PIN_GPIO_Port,
+			.ms3_gpio_pin = MOTOR_MS3_PIN_Pin,
+			.tim_handle = &htim4,
+			.tim_channel = TIM_CHANNEL_1
 		},
 		{
-
-			.current_frequency	= 0,
-			// .target_frequency	= 0,
-			.step_model		= DEFAULT_STEP,
-			.dir			= POSITIVE_DIR,
+			.current_frequency = 0,
+			.step_model = DEFAULT_STEP,
+			.dir = POSITIVE_DIR,
 		}
 	};
-	// 步进电机驱动测试
-	if (step_motor_init(&motor) != DRV_OK){
+
+	if (step_motor_init(&motor) != DRV_OK) {
 		Error_Handler();
-	};
+	}
 
-	/**
-	 * 测试主要功能:
-	 * 1. 电机调速 (step_motor_set_speed)
-	 * 2. 指定电机输出特定角度 (step_motor_move_angle)
-	 * 3. 电机方向更改
-	 * 4. 持续运行 + 周期性换向
+	/* 运行全部单元测试
+	 * 测试1: 电机调速 (step_motor_set_speed)
+	 * 测试2: 指定角度 (step_motor_move_angle)
+	 * 测试3: 电机方向更改
+	 * 测试4: 持续运行 + 周期性换向
+	 * 测试5: 设置不同步长模式
 	 */
+	test_step_motor_run_all(&motor);
 
-	/* ── 测试1：非阻塞匀速运行，频率 1062Hz ── */
-	step_motor_set_direction(&motor, POSITIVE_DIR);
-	if (step_motor_start(&motor) != DRV_OK) Error_Handler();
-	// step_motor_set_pulse_freq(&motor, 1000);
-	// 测试2 : 加速
-	step_motor_set_speed(&motor, 600, motor.step_motor_information.dir);
 	/* USER CODE END 2 */
 
 	/* Infinite loop */
 	/* USER CODE BEGIN WHILE */
-	while (1){
+	while (1) {
 		/* USER CODE END WHILE */
 
 		/* USER CODE BEGIN 3 */
-		/* 测试2：每 5s 换向一次 */
-		DELAY_MS(5000);
-		step_motor_set_direction(&motor,
-		                         (motor.step_motor_information.dir == POSITIVE_DIR)
-		                         ? NEGATIVE_DIR : POSITIVE_DIR);
+		DELAY_MS(1000);
 	}
 	/* USER CODE END 3 */
 }
@@ -181,7 +176,6 @@ void SystemClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
-
 
 
 /* USER CODE END 4 */

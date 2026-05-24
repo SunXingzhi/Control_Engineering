@@ -3,6 +3,8 @@ SET(CMAKE_LIBRARY_NAME driver_step_motor)
 add_library(${CMAKE_LIBRARY_NAME} STATIC
         driver_step_motor.c
         driver_step_motor.h
+	test_step_motor.c
+	test_step_motor.h
 	public_rule.c
 	public_rule.h)
 message(STATUS "Building device driver library: ${CMAKE_LIBRARY_NAME}).")
