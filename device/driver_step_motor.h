@@ -179,7 +179,9 @@ device_err_t step_motor_set_step_model(step_motor_t* motor);
 device_err_t step_motor_start(step_motor_t* motor);
 device_err_t step_motor_stop(step_motor_t* motor);
 // device_err_t step_motor_set_speed_size(step_motor_t* motor, uint32_t speed);
-device_err_t step_motor_set_speed(step_motor_t* motor, uint32_t speed, motor_direction_t dir);
+device_err_t step_motor_set_speed(step_motor_t* motor,
+				const float speed,
+				const motor_direction_t dir);
 device_err_t step_motor_move_angle(step_motor_t* motor, motor_direction_t dir, float angle);
 device_err_t step_motor_update_angle(const step_motor_t* motor, motor_direction_t dir,
                                      const float angle);

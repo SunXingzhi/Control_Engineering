@@ -50,9 +50,9 @@ uint16_t motor_speed_to_freq(float motor_speed_rpm, motor_step_model_t step_mode
 	}
 
 	frequency	= (uint16_t)(motor_speed_rpm * multiple * 10/3);
-	if (frequency>MAX_PWM_FREQUENCY_HZ){
-		return 0;
-	}
+	// 如果超过最大电机频率限制, 则限制为最大频率
+	if (frequency>MAX_PWM_FREQUENCY_HZ) return MAX_PWM_FREQUENCY_HZ;
+
 
 	return frequency;
 }
@@ -247,8 +247,16 @@ device_err_t step_motor_stop(step_motor_t* motor)
 }
 
 
-
-device_err_t step_motor_set_speed(step_motor_t* motor, const uint32_t speed, motor_direction_t dir)
+/**
+ *
+ * @param motor 设置步进电机速度(非阻塞, 可被打断)
+ * @param speed 电机转速(单位rpm, 支持浮点数, 但最后在转化频率时会出现小数舍去的情况)
+ * @param dir 电机运动方向
+ * @return device_err_t	设备操作结果是否成功
+ * @note 如果传入的速度与步进模式计算出的频率大于步进电机支持的频率, 则强制转换成该最大频率.
+ * 最大频率在driver_step_motor.h
+ */
+device_err_t step_motor_set_speed(step_motor_t* motor, const float speed, const motor_direction_t dir)
 {
 	if (motor == NULL) return DRV_ERR_NULL;
 	if (dir>STOP_DIR) return DRV_ERR_PARAM;
@@ -260,11 +268,11 @@ device_err_t step_motor_set_speed(step_motor_t* motor, const uint32_t speed, mot
 	step_motor_set_direction(motor, dir);
 
 	// 根据转速获取实际转动频率
-	const uint16_t target_freq = motor_speed_to_freq(speed,
+	uint16_t target_freq = motor_speed_to_freq(speed,
 						motor->step_motor_information.step_model);
-	if (target_freq == 0) {
-		return DRV_ERR_PARAM;
-	}
+	if (target_freq == 0) return DRV_ERR_PARAM;
+	// 如果频率过大, 设置为支持的电机最大频率
+	if (target_freq>MAX_PWM_FREQUENCY_HZ) target_freq	= MAX_PWM_FREQUENCY_HZ;
 
 	// 配置斜坡参数（ACCEL/DECEL 判断交给 start 根据 ramp 内部 freq 完成.
 
@@ -281,7 +289,7 @@ device_err_t step_motor_set_speed(step_motor_t* motor, const uint32_t speed, mot
  * @brief  运动指定角度后自动停止（非阻塞）
  * @note   通过 TIM4 更新中断对每个 STEP 脉冲计数，
  *         计数完毕后在中断回调中自动关 PWM + 关中断.
- *         函数默认会先将PWM输出关闭
+ *         函数默认会先将PWM输出关闭.
  * @param  motor: 步进电机指针（调用方需传非 const 指针）
  * @param  dir:   运动方向
  * @param  angle: 旋转角度（°）
@@ -338,8 +346,6 @@ device_err_t step_motor_update_angle(const step_motor_t* motor,
                                      const float angle)
 {
 	if (motor == NULL || angle <= 0.0f) return DRV_ERR_NULL;
-
-	/* const 指针不能直接传给 move_angle，通过 g_ramp.motor 间接获取 */
 	if (g_ramp.motor == NULL || g_ramp.motor != motor) return DRV_ERR_PARAM;
 
 	return step_motor_move_angle(g_ramp.motor, dir, angle);
