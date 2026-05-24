@@ -123,6 +123,12 @@ typedef struct motor_base{
 	uint16_t	dir_gpio_pin;	// 方向引脚编号
 	GPIO_TypeDef*	step_gpio_port;	// 脉冲控制引脚
 	uint16_t	step_gpio_pin;	// 脉冲引脚编号
+	GPIO_TypeDef*	ms1_gpio_port;	// ms1控制GPIO
+	uint16_t	ms1_gpio_pin;
+	GPIO_TypeDef*	ms2_gpio_port;
+	uint16_t	ms2_gpio_pin;
+	GPIO_TypeDef*	ms3_gpio_port;
+	uint16_t	ms3_gpio_pin;
 	TIM_HandleTypeDef* tim_handle; // 脉冲输出的定时器句柄
 	uint32_t tim_channel; // TIM_CHANNEL_1~4
 } motor_base_t;
@@ -178,7 +184,6 @@ device_err_t step_motor_move_angle(step_motor_t* motor, motor_direction_t dir, f
 device_err_t step_motor_update_angle(const step_motor_t* motor, motor_direction_t dir,
                                      const float angle);
 device_err_t step_motor_set_pulse_freq(step_motor_t* motor, uint16_t pulse_freq_hz);
-device_err_t step_motor_set_direction(step_motor_t* motor, motor_direction_t dir);
 
 device_err_t step_motor_set_absolute_position(step_motor_t* motor, const uint32_t absolute_position);
 
