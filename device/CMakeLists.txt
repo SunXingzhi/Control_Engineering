@@ -9,6 +9,8 @@ add_library(${CMAKE_LIBRARY_NAME} STATIC
 	public_rule.h
 	uart.c
 	uart.h
+	mt6701.c
+	mt6701.h
 	device_err.h)
 message(STATUS "Building device driver library: ${CMAKE_LIBRARY_NAME}).")
 

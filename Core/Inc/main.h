@@ -57,6 +57,8 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
+#define MT6701_CSN_Pin GPIO_PIN_4
+#define MT6701_CSN_GPIO_Port GPIOA
 #define MOTOR_DIR_PIN_Pin GPIO_PIN_5
 #define MOTOR_DIR_PIN_GPIO_Port GPIOB
 #define MOTOR_STEP_PIN_Pin GPIO_PIN_6
