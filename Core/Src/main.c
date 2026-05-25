@@ -125,6 +125,7 @@ int main(void)
          * 测试3: 电机方向更改
          * 测试4: 持续运行 + 周期性换向
          * 测试5: 设置不同步长模式
+         * 123456
          */
         test_step_motor_run_all(&motor);
 
