@@ -26,8 +26,8 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "driver_step_motor.h"
-#include "test_step_motor.h"
+#include "../../device/include/driver_step_motor.h"
+#include "../../device/include/test_step_motor.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/

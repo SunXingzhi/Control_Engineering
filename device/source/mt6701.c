@@ -3,7 +3,7 @@
  * @brief   MT6701 磁编码器驱动实现（SPI + DMA）
  */
 
-#include "mt6701.h"
+#include "../include/mt6701.h"
 
 #define MT6701_ANGLE_MAX    (2.0f * 3.1415926f)
 #define MT6701_RAW_MAX      ((1 << 14) - 1)   /* 16383 */

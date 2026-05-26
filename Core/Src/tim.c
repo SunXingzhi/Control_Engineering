@@ -21,7 +21,7 @@
 #include "tim.h"
 
 /* USER CODE BEGIN 0 */
-#include "mt6701.h"
+#include "../../device/include/mt6701.h"
 extern uint32_t tim_clock_freq;
 /* USER CODE END 0 */
 

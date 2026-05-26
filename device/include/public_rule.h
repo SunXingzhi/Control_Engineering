@@ -20,6 +20,7 @@ typedef enum device_err{
 	DRV_ERR_IO,
 } device_err_t;
 
+
 // 常见数值运算方法
 float self_fabs(float x);
 
