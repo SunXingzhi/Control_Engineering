@@ -2,7 +2,7 @@
 #define DEVICE_UART_H
 
 #include "stm32f1xx_hal.h"
-#include "device_err.h"
+#include "public_rule.h"
 // test1
 /* 驱动内部缓冲大小（与 CubeMX 配置无关） */
 #define UART_RX_BUF_SIZE        256U

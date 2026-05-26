@@ -11,7 +11,7 @@ add_library(${CMAKE_LIBRARY_NAME} STATIC
 	uart.h
 	mt6701.c
 	mt6701.h
-	device_err.h)
+)
 message(STATUS "Building device driver library: ${CMAKE_LIBRARY_NAME}).")
 
 file(GLOB SOURCE_FILES CONFIGURE_DEPENDS *.c)
