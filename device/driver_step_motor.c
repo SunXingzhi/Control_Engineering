@@ -634,32 +634,32 @@ static device_err_t ramp_step_motor_tick(motor_ramp_t* ramp)
  *
  * @param htim: 触发回调的 TIM 句柄
  */
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* htim)
-{
-	/* 只处理 TIM4 的步数限位模式 */
-	if (htim->Instance != TIM4) return;
-	if (g_ramp.state != RAMP_STEP)   return;
-	if (g_ramp.motor == NULL)        return;
-
-	step_motor_t *motor = g_ramp.motor;
-
-	if (g_ramp.step_number > 0) {
-		g_ramp.step_number--;
-	}
-
-	if (g_ramp.step_number == 0) {
-		// 目标步数到达
-		__HAL_TIM_DISABLE_IT(htim, TIM_IT_UPDATE);
-
-		// 关闭PWM
-		step_motor_pwm_off(motor);
-
-		// 状态机回到空闲
-		g_ramp.state        = RAMP_IDLE;
-		g_ramp.freq_current = 0;
-		g_ramp.freq_target  = 0;
-	}
-}
+// void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* htim)
+// {
+// 	/* 只处理 TIM4 的步数限位模式 */
+// 	if (htim->Instance != TIM4) return;
+// 	if (g_ramp.state != RAMP_STEP)   return;
+// 	if (g_ramp.motor == NULL)        return;
+//
+// 	step_motor_t *motor = g_ramp.motor;
+//
+// 	if (g_ramp.step_number > 0) {
+// 		g_ramp.step_number--;
+// 	}
+//
+// 	if (g_ramp.step_number == 0) {
+// 		// 目标步数到达
+// 		__HAL_TIM_DISABLE_IT(htim, TIM_IT_UPDATE);
+//
+// 		// 关闭PWM
+// 		step_motor_pwm_off(motor);
+//
+// 		// 状态机回到空闲
+// 		g_ramp.state        = RAMP_IDLE;
+// 		g_ramp.freq_current = 0;
+// 		g_ramp.freq_target  = 0;
+// 	}
+// }
 
 #if !defined(USE_FREE_RTOS)
 	/**
