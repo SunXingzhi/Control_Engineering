@@ -62,6 +62,12 @@ void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(MT6701_CSN_GPIO_Port, &GPIO_InitStruct);
 
+  /*Configure GPIO pins : MOTOR_LIMIT_CLOSE_PIN_Pin MOTOR_LIMIT_REMOTE_PIN_Pin */
+  GPIO_InitStruct.Pin = MOTOR_LIMIT_CLOSE_PIN_Pin|MOTOR_LIMIT_REMOTE_PIN_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
   /*Configure GPIO pin : MOTOR_DIR_PIN_Pin */
   GPIO_InitStruct.Pin = MOTOR_DIR_PIN_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;

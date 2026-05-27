@@ -31,7 +31,7 @@ extern "C" {
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include <stdio.h>
 /* USER CODE END Includes */
 
 /* Exported types ------------------------------------------------------------*/
@@ -59,6 +59,10 @@ void Error_Handler(void);
 /* Private defines -----------------------------------------------------------*/
 #define MT6701_CSN_Pin GPIO_PIN_4
 #define MT6701_CSN_GPIO_Port GPIOA
+#define MOTOR_LIMIT_CLOSE_PIN_Pin GPIO_PIN_11
+#define MOTOR_LIMIT_CLOSE_PIN_GPIO_Port GPIOA
+#define MOTOR_LIMIT_REMOTE_PIN_Pin GPIO_PIN_12
+#define MOTOR_LIMIT_REMOTE_PIN_GPIO_Port GPIOA
 #define MOTOR_DIR_PIN_Pin GPIO_PIN_5
 #define MOTOR_DIR_PIN_GPIO_Port GPIOB
 #define MOTOR_STEP_PIN_Pin GPIO_PIN_6
