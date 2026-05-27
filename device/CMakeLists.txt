@@ -2,6 +2,7 @@ SET(CMAKE_LIBRARY_NAME device_driver)
 
 message(STATUS "Building device driver library: ${CMAKE_LIBRARY_NAME}).")
 
+# 配置头文件集合以及源文件集合, 使用CONFIGURE_DEPENDS参数使CMake可以动态识别文件变化.
 file(GLOB SOURCE_FILES CONFIGURE_DEPENDS "source/*.c")
 file(GLOB HEADER_FILES CONFIGURE_DEPENDS "include/*.h")
 if ((NOT SOURCE_FILES) AND (NOT HEADER_FILES))
