@@ -29,7 +29,8 @@
 #include "../../device/include/driver_step_motor.h"
 #include "../../device/include/test_step_motor.h"
 /* USER CODE END Includes */
-
+#include "mt6701.h"
+#include <stdlib.h>
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
 
@@ -50,7 +51,14 @@
 /* USER CODE BEGIN PV */
 extern motor_ramp_t g_ramp;
 /* USER CODE END PV */
-
+mt6701_t	encorder = {
+	.sensor = {
+		.hspi			= &hspi1,
+		.cs_gpiox		= MT6701_CSN_GPIO_Port,
+		.cs_gpio_pin	= MT6701_CSN_Pin,
+		.htim			= &htim3,
+	},
+};
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
