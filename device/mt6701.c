@@ -76,17 +76,17 @@ device_err_t angle_sensor_init(mt6701_t *dev)
     return DRV_OK;
 }
 
-device_err_t angle_sensor_read_angle(mt6701_t *dev, uint32_t *angle)
+device_err_t angle_sensor_read_angle(mt6701_t *dev, float *angle)
 {
     if (dev == NULL || angle == NULL) return DRV_ERR_NULL;
-    *angle = dev->sensor.angle_raw;
+    *angle = dev->sensor.angle;
     return DRV_OK;
 }
 
-device_err_t angle_sensor_read_speed(mt6701_t *dev, int32_t *speed)
+device_err_t angle_sensor_read_speed(mt6701_t *dev, float *speed)
 {
     if (dev == NULL || speed == NULL) return DRV_ERR_NULL;
-    *speed = dev->sensor.speed_raw;
+    *speed = dev->sensor.speed;
     return DRV_OK;
 }
 
@@ -153,6 +153,6 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 
     float diff = cycle_diff(s->angle - s->angle_last, MT6701_ANGLE_MAX);
     s->angle_last = s->angle;
-    s->speed      = diff * speed_calc_freq;
+    s->speed      = (float)(diff * speed_calc_freq);
     s->speed_raw  = (int32_t)(s->speed * 100.0f * (180.0f / 3.1415926f));
 }

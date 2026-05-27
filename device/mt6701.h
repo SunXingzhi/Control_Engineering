@@ -7,21 +7,11 @@
 #define __MT6701_H
 
 #include "stm32f1xx_hal.h"
+#include "public_rule.h"
 #include <stdint.h>
 
 /* ---- 速度计算频率（供 MX_TIM3_Init 使用）---- */
-#define speed_calc_freq     1000U   /* Hz */
-
-/* ---- 公共设备返回值 ---- */
-typedef enum {
-    DRV_OK = 0,
-    DRV_ERR_NULL,
-    DRV_ERR_INIT,
-    DRV_ERR_TIMEOUT,
-    DRV_ERR_PARAM,
-    DRV_ERR_BUSY,
-    DRV_ERR_IO,
-} device_err_t;
+#define speed_calc_freq     1000   /* Hz */
 
 /* ================================================================
  *  角度传感器基类（硬件抽象）
@@ -68,7 +58,7 @@ device_err_t angle_sensor_init(mt6701_t *dev);
  * @param  angle    [out] 原始角度值（14-bit, 0~16383）
  * @retval DRV_OK / DRV_ERR_NULL
  */
-device_err_t angle_sensor_read_angle(mt6701_t *dev, uint32_t *angle);
+device_err_t angle_sensor_read_angle(mt6701_t *dev, float *angle);
 
 /**
  * @brief  读取当前角速度
@@ -76,6 +66,6 @@ device_err_t angle_sensor_read_angle(mt6701_t *dev, uint32_t *angle);
  * @param  speed    [out] 角速度（度/秒 × 100），正值正转，负值反转
  * @retval DRV_OK / DRV_ERR_NULL
  */
-device_err_t angle_sensor_read_speed(mt6701_t *dev, int32_t *speed);
+device_err_t angle_sensor_read_speed(mt6701_t *dev, float *speed);
 
 #endif /* __MT6701_H */

@@ -28,6 +28,8 @@
 /* USER CODE BEGIN Includes */
 #include "driver_step_motor.h"
 #include "test_step_motor.h"
+#include "mt6701.h"
+#include <stdlib.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -49,6 +51,14 @@
 
 /* USER CODE BEGIN PV */
 extern motor_ramp_t g_ramp;
+mt6701_t	encorder = {
+	.sensor = {
+		.hspi			= &hspi1,
+		.cs_gpiox		= MT6701_CSN_GPIO_Port,
+		.cs_gpio_pin	= MT6701_CSN_Pin,
+		.htim			= &htim3,
+	},
+};
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -96,53 +106,24 @@ int main(void)
 	MX_SPI1_Init();
 	MX_TIM3_Init();
 	/* USER CODE BEGIN 2 */
-	step_motor_t motor = {
-		HR4988,
-		{
-			.dir_gpio_pin = GPIO_PIN_5,
-			.dir_gpio_port = GPIOB,
-			.step_gpio_port = MOTOR_STEP_PIN_GPIO_Port,
-			.step_gpio_pin = MOTOR_STEP_PIN_Pin,
-			.ms1_gpio_port = MOTOR_MS1_PIN_GPIO_Port,
-			.ms1_gpio_pin = MOTOR_MS1_PIN_Pin,
-			.ms2_gpio_port = MOTOR_MS2_PIN_GPIO_Port,
-			.ms2_gpio_pin = MOTOR_MS2_PIN_Pin,
-			.ms3_gpio_port = MOTOR_MS3_PIN_GPIO_Port,
-			.ms3_gpio_pin = MOTOR_MS3_PIN_Pin,
-			.tim_handle = &htim4,
-			.tim_channel = TIM_CHANNEL_1
-		},
-		{
-			.current_frequency = 0,
-			.step_model = DEFAULT_STEP,
-			.dir = POSITIVE_DIR,
-		}
-	};
-
-	if (step_motor_init(&motor) != DRV_OK){
+	if (angle_sensor_init(&encorder) != DRV_OK){
+		printf("MT6701 init failed!\r\n");
 		Error_Handler();
 	}
-
-	/* 运行全部单元测试
-	 * 测试1: 电机调速 (step_motor_set_speed)
-	 * 测试2: 指定角度 (step_motor_move_angle)
-	 * 测试3: 电机方向更改
-	 * 测试4: 持续运行 + 周期性换向
-	 * 测试5: 设置不同步长模式
-	 * 123456
-	 */
-	test_step_motor_run_all(&motor);
-
+	printf("MT6701 init OK\r\n");
 	/* USER CODE END 2 */
 
 	/* Infinite loop */
 	/* USER CODE BEGIN WHILE */
 	while (1){
-		/* USER CODE END WHILE */
-
-		/* USER CODE BEGIN 3 */
-		DELAY_MS(1000);
+		float angle;
+		float  speed;
+		angle_sensor_read_angle(&encorder, &angle);
+		angle_sensor_read_speed(&encorder, &speed);
+		printf("%f,%f\r\n", angle, speed);
+		HAL_Delay(100);
 	}
+
 	/* USER CODE END 3 */
 }
 
