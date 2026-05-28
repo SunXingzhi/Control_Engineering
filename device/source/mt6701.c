@@ -53,6 +53,8 @@ device_err_t angle_sensor_init(mt6701_t *dev)
     dev->sensor.angle         = 0.0f;
     dev->sensor.speed         = 0.0f;
     dev->sensor.angle_last    = 0.0f;
+    dev->sensor.angle_prev    = 0.0f;
+    dev->sensor.angle_total   = 0.0f;
     dev->sensor.first_sample  = 1;
 
     /* TX 填充 dummy 数据 */
@@ -90,6 +92,13 @@ device_err_t angle_sensor_read_speed(mt6701_t *dev, float *speed)
     return DRV_OK;
 }
 
+device_err_t angle_sensor_read_total_angle(mt6701_t *dev, float *angle)
+{
+    if (dev == NULL || angle == NULL) return DRV_ERR_NULL;
+    *angle = dev->sensor.angle_total;
+    return DRV_OK;
+}
+
 /* ---- HAL 回调（从中断上下文调用）---- */
 
 void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
@@ -119,6 +128,15 @@ void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
 
     s->angle_raw = (uint32_t)angle_raw;
     s->angle     = MT6701_ANGLE_MAX * angle_raw / MT6701_RAW_MAX;
+
+    /* 累计角度：检测过零点并累加/递减 */
+    float diff = s->angle - s->angle_prev;
+    if (diff > 3.1415926f)          /* 从 ~2π 跳到 ~0，说明反转过零 */
+        diff -= MT6701_ANGLE_MAX;
+    else if (diff < -3.1415926f)    /* 从 ~0 跳到 ~2π，说明正转过零 */
+        diff += MT6701_ANGLE_MAX;
+    s->angle_total += diff;
+    s->angle_prev = s->angle;       /* 移到这里，供下次过零检测用 */
 
     /* 再次发起读取 */
     HAL_GPIO_WritePin(s->cs_gpiox, s->cs_gpio_pin, GPIO_PIN_RESET);

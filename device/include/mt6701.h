@@ -28,6 +28,8 @@ typedef struct {
     float               angle;          /* 当前角度，弧度 (0 ~ 2pi)       */
     float               speed;          /* 当前角速度，弧度/秒            */
     float               angle_last;     /* 上一次角度（速度计算用）       */
+    float               angle_prev;     /* 上一次角度（累积角度过零检测用） */
+    float               angle_total;    /* 累计角度，正转累加，反转递减     */
     uint8_t             first_sample;   /* 首次采样标志                   */
 } angle_sensor_t;
 
@@ -55,7 +57,7 @@ device_err_t angle_sensor_init(mt6701_t *dev);
 /**
  * @brief  读取当前角度
  * @param  dev      MT6701 设备指针
- * @param  angle    [out] 原始角度值（14-bit, 0~16383）
+ * @param  angle    [out] 角度值（弧度制，0~2π）
  * @retval DRV_OK / DRV_ERR_NULL
  */
 device_err_t angle_sensor_read_angle(mt6701_t *dev, float *angle);
@@ -67,5 +69,13 @@ device_err_t angle_sensor_read_angle(mt6701_t *dev, float *angle);
  * @retval DRV_OK / DRV_ERR_NULL
  */
 device_err_t angle_sensor_read_speed(mt6701_t *dev, float *speed);
+
+/**
+ * @brief  读取累计角度
+ * @param  dev      MT6701 设备指针
+ * @param  angle    [out] 累计角度（弧度制，0~2π），正转累加，反转递减
+ * @retval DRV_OK / DRV_ERR_NULL
+ */
+device_err_t angle_sensor_read_total_angle(mt6701_t *dev, float *angle);
 
 #endif /* __MT6701_H */
