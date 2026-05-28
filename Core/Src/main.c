@@ -30,6 +30,7 @@
 #include "../../device/include/driver_step_motor.h"
 #include "../../device/include/test_step_motor.h"
 #include  <stdio.h>
+#include "mt6701.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -128,7 +129,15 @@ int main(void)
 	}
 
 	/* 初始化编码器 */
-	if (angle_sensor_init(&encorder) != DRV_OK) {
+	mt6701_t encoder = {
+		.sensor = {
+			.hspi        = &hspi1,
+			.cs_gpiox    = GPIOA,
+			.cs_gpio_pin = GPIO_PIN_4,
+			.htim        = &htim3,
+		},
+	};
+	if (angle_sensor_init(&encoder) != DRV_OK) {
 		Error_Handler();
 	}
 
@@ -144,9 +153,9 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-		angle_sensor_read_total_angle(&encorder, &total_angle);
-		angle_sensor_read_angle(&encorder, &angle);
-		angle_sensor_read_speed(&encorder, &speed);
+		angle_sensor_read_total_angle(&encoder, &total_angle);
+		angle_sensor_read_angle(&encoder, &angle);
+		angle_sensor_read_speed(&encoder, &speed);
 
 		/* 角度与角速度打印 */
 		printf("%.2f,%.2f,%.2f\r\n",
