@@ -28,6 +28,7 @@
 /* USER CODE BEGIN Includes */
 #include "../../device/include/driver_step_motor.h"
 #include "../../device/include/test_step_motor.h"
+#include  <stdio.h>
 /* USER CODE END Includes */
 #include "mt6701.h"
 #include <stdlib.h>
@@ -132,15 +133,14 @@ int main(void)
 		Error_Handler();
 	}
 
-	/* 运行全部单元测试
-	 * 测试1: 电机调速 (step_motor_set_speed)
-	 * 测试2: 指定角度 (step_motor_move_angle)
-	 * 测试3: 电机方向更改
-	 * 测试4: 持续运行 + 周期性换向
-	 * 测试5: 设置不同步长模式
-	 * 123456
-	 */
-	test_step_motor_run_all(&motor);
+	/* 初始化编码器 */
+	if (angle_sensor_init(&encorder) != DRV_OK) {
+		Error_Handler();
+	}
+
+	float total_angle = 0.0f;
+	float speed = 0.0f;
+	float angle = 0.0f;
 
   /* USER CODE END 2 */
 
@@ -150,7 +150,17 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-		DELAY_MS(1000);
+		angle_sensor_read_total_angle(&encorder, &total_angle);
+		angle_sensor_read_angle(&encorder, &angle);
+		angle_sensor_read_speed(&encorder, &speed);
+
+		/* 角度与角速度打印 */
+		printf("%.2f,%.2f,%.2f\r\n",
+			   total_angle,
+			   angle,
+			   speed);
+
+		HAL_Delay(100);  // 100ms 打印一次
 	}
   /* USER CODE END 3 */
 }
