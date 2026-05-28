@@ -2,7 +2,7 @@
 // Created by q1325 on 2026/5/16.
 //
 
-#include "driver_step_motor.h"
+#include "../include/driver_step_motor.h"
 #include <stdbool.h>
 
 #include "main.h"

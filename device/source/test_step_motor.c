@@ -3,7 +3,7 @@
 // 步进电机驱动单元测试实现
 //
 
-#include "test_step_motor.h"
+#include "../include/test_step_motor.h"
 
 // ──────────────────────────────────────────────
 // 测试1: 非阻塞匀速运行
