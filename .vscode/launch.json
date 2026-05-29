@@ -1,0 +1,36 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        
+        {
+            "name": "调试 STM32F103 (ST-Link)",
+            "type": "cortex-debug",
+            "request": "launch",
+            "servertype": "openocd",
+            "cwd": "${workspaceFolder}",
+            "executable": "${workspaceFolder}/build/Debug/motor_driver_no_freertos_example.elf",
+            "configFiles": ["${workspaceFolder}/stm32f103c8t6_stlink.cfg"],
+            "toolchainPrefix": "arm-none-eabi",
+            "armToolchainPath": "D:\\STM32_vscode\\10 2021.10\\bin",
+            "openOCDPath": "D:\\STM32_vscode\\OpenOCD-20250710-0.12.0\\bin\\openocd.exe",
+            "svdFile": "",
+            "runToEntryPoint": "main",
+            "showDevDebugOutput": "raw",
+            "postRestartCommands": ["break main", "continue"]
+        },
+        {
+            "name": "附加调试 STM32F103 (ST-Link)",
+            "type": "cortex-debug",
+            "request": "attach",
+            "servertype": "openocd",
+            "cwd": "${workspaceFolder}",
+            "executable": "${workspaceFolder}/build/Debug/motor_driver_no_freertos_example.elf",
+            "configFiles": ["${workspaceFolder}/stm32f103c8t6_stlink.cfg"],
+            "toolchainPrefix": "arm-none-eabi",
+            "armToolchainPath": "D:\\STM32_vscode\\10 2021.10\\bin",
+            "openOCDPath": "D:\\STM32_vscode\\OpenOCD-20250710-0.12.0\\bin\\openocd.exe",
+            "svdFile": "",
+            "showDevDebugOutput": "raw"
+        }
+    ]
+}
