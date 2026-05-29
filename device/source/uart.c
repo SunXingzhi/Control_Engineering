@@ -1,10 +1,20 @@
 #include "../include/uart.h"
 
+#ifdef USE_FREERTOS
+#include "FreeRTOS.h"
+#include "task.h"
+#endif
+
 /* 单字节接收暂存 */
 static uint8_t uart_rx_byte;
 
 /* 当前活跃 UART，供中断回调使用 */
 static uart_base_t* uart_active;
+
+#ifdef USE_FREERTOS
+/* 接收完成时通知的任务句柄 */
+static TaskHandle_t uart_notify_task = NULL;
+#endif
 
 /* 启动单字节中断接收链 */
 static void uart_start_rx(uart_base_t* uart)
@@ -66,6 +76,13 @@ int uart_idle_hook(UART_HandleTypeDef* huart)
 
         if (uart_active->rx_len > 0) {
             uart_active->rx_done = 1;
+#ifdef USE_FREERTOS
+            if (uart_notify_task != NULL) {
+                BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+                vTaskNotifyGiveFromISR(uart_notify_task, &xHigherPriorityTaskWoken);
+                portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+            }
+#endif
         }
         return 1;
     }
@@ -118,7 +135,11 @@ uint16_t uart_recv(uart_base_t* uart, uint8_t* buf, uint16_t len)
 
     uint16_t copy_len = 0;
 
+#ifdef USE_FREERTOS
+    taskENTER_CRITICAL();
+#else
     __disable_irq();
+#endif
     if (uart->rx_done && uart->rx_len > 0) {
         copy_len = (uart->rx_len < len) ? uart->rx_len : len;
         for (uint16_t i = 0; i < copy_len; i++) {
@@ -127,7 +148,28 @@ uint16_t uart_recv(uart_base_t* uart, uint8_t* buf, uint16_t len)
         uart->rx_len  = 0;
         uart->rx_done = 0;
     }
+#ifdef USE_FREERTOS
+    taskEXIT_CRITICAL();
+#else
     __enable_irq();
+#endif
 
     return copy_len;
 }
+
+#ifdef USE_FREERTOS
+void uart_set_notify_task(uart_base_t *uart, TaskHandle_t task)
+{
+    (void)uart;
+    uart_notify_task = task;
+}
+
+uint32_t uart_wait_rx(uint32_t timeout_ms)
+{
+    TickType_t ticks = (timeout_ms == UINT32_MAX)
+        ? portMAX_DELAY
+        : pdMS_TO_TICKS(timeout_ms);
+
+    return ulTaskNotifyTake(pdTRUE, ticks);
+}
+#endif

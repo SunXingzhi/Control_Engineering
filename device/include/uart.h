@@ -26,4 +26,15 @@ uint16_t uart_recv(uart_base_t *uart, uint8_t *buf, uint16_t len);
 
 int uart_idle_hook(UART_HandleTypeDef *huart);
 
+#ifdef USE_FREERTOS
+#include "FreeRTOS.h"
+#include "task.h"
+
+/* RTOS：设置接收完成时通知的任务 */
+void uart_set_notify_task(uart_base_t *uart, TaskHandle_t task);
+
+/* RTOS：阻塞等待一帧数据到达（不占 CPU），返回后调用 uart_recv 读数据 */
+uint32_t uart_wait_rx(uint32_t timeout_ms);
+#endif
+
 #endif /* DEVICE_UART_H */
