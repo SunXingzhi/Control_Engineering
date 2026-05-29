@@ -29,6 +29,7 @@
 /* USER CODE BEGIN Includes */
 #include "../../device/include/driver_step_motor.h"
 #include "../../device/include/test_step_motor.h"
+#include "../../device/include/uart.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -50,6 +51,14 @@
 
 /* USER CODE BEGIN PV */
 extern motor_ramp_t g_ramp;
+
+static uint8_t rx_buf[UART_RX_BUF_SIZE];
+
+static uart_base_t uart1 = {
+	.huart       = &huart1,
+	.rx_buf      = rx_buf,
+	.rx_buf_size = UART_RX_BUF_SIZE,
+    };
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -99,6 +108,7 @@ int main(void)
   MX_TIM3_Init();
   MX_ADC1_Init();
   /* USER CODE BEGIN 2 */
+	uart_init(&uart1);
 	step_motor_t motor = {
 		HR4988,
 		{
@@ -144,6 +154,10 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+		if (uart1.rx_done) {
+			uint8_t buf[256];
+			uint16_t n = uart_recv(&uart1, buf, sizeof(buf));
+		}
 		DELAY_MS(1000);
 	}
   /* USER CODE END 3 */
