@@ -4,7 +4,7 @@
 
 #ifndef TWO_LINK_DRIVER_STEP_MOTOR_H
 #define TWO_LINK_DRIVER_STEP_MOTOR_H
-#include "public_rule.h"
+#include "device.h"
 
 /* RTOS 条件编译头文件 */
 #ifdef USE_FREERTOS

@@ -4,7 +4,7 @@
  */
 #ifndef __PID_H__
 #define __PID_H__
-#include "public_rule.h"
+#include "device.h"
 
 typedef struct PID{
 	float	Kp;            // 比例系数

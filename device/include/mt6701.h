@@ -8,7 +8,7 @@
 
 #include "stm32f1xx_hal.h"
 #include <stdint.h>
-#include "public_rule.h"
+#include "device.h"
 
 /* ---- 速度计算频率（供 MX_TIM3_Init 使用）---- */
 #define speed_calc_freq     1000   /* Hz */

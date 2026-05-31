@@ -2,7 +2,7 @@
 // Created by q1325 on 2026/5/16.
 //
 
-#include "../include/public_rule.h"
+#include "../include/device.h"
 #include "mt6701.h"
 #include "driver_step_motor.h"
 
