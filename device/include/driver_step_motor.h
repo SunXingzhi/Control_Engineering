@@ -172,7 +172,6 @@ typedef struct step_motor{
 } step_motor_t;
 
 
-
 device_err_t step_motor_init(step_motor_t* motor);
 device_err_t step_motor_deinit(step_motor_t* motor);
 device_err_t step_motor_set_step_model(step_motor_t* motor);
@@ -188,7 +187,7 @@ device_err_t step_motor_update_angle(const step_motor_t* motor, motor_direction_
 device_err_t step_motor_set_pulse_freq(step_motor_t* motor, uint16_t pulse_freq_hz);
 
 device_err_t step_motor_set_absolute_position(step_motor_t* motor, const uint32_t absolute_position);
-
+void         step_motor_pwm_off(step_motor_t* motor);
 void ramp_step_motor_set(motor_ramp_t* ramp, step_motor_t* motor,
 		uint32_t current_freq,
 		uint32_t target_freq,

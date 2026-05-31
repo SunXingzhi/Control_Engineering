@@ -16,7 +16,7 @@ motor_ramp_t g_ramp = {0};
 static device_err_t ramp_step_motor_init(motor_ramp_t* ramp, step_motor_t* motor,
                                          uint32_t target_freq, uint32_t step_freq, uint32_t hold_ms);
 static device_err_t ramp_step_motor_start(motor_ramp_t* ramp);
-static void         step_motor_pwm_off(step_motor_t* motor);
+void         step_motor_pwm_off(step_motor_t* motor);
 static device_err_t step_motor_set_direction(step_motor_t* motor, motor_direction_t dir);
 
 // ===============================工具函数==============================
@@ -432,9 +432,9 @@ static device_err_t step_motor_set_direction(step_motor_t* motor, motor_directio
  * @brief  内部函数：立即关闭 PWM 并复位电机状态（硬停止）
  * @note   仅供 ramp tick 状态机在减速到 0 后调用，不应从外部 API 直接调用
  */
-static void step_motor_pwm_off(step_motor_t* motor)
+void step_motor_pwm_off(step_motor_t* motor)
 {
-	// 先关 TIM 更新中断，再停 PWM（不用就关，避免空转中断消耗 CPU）
+	// 先关 TIM 更新中断，再停 PWM（避免空转中断占资源）
 	__HAL_TIM_DISABLE_IT(motor->motor_base_info.tim_handle, TIM_IT_UPDATE);
 	HAL_TIM_PWM_Stop(motor->motor_base_info.tim_handle, motor->motor_base_info.tim_channel);
 	motor->step_motor_information.current_frequency = 0;
@@ -443,10 +443,7 @@ static void step_motor_pwm_off(step_motor_t* motor)
 
 
 
-/* ======================== 非阻塞加速斜坡（中断驱动） ========================
- * 步进电机驱动内部使用
- */
-
+// ======================== 非阻塞加速斜坡（中断驱动, 步进电机驱动内部使用） ========================
 /**
  * @brief  设置斜坡参数（不启动电机）
  * @param ramp:        斜坡状态机指针
@@ -636,29 +633,7 @@ static device_err_t ramp_step_motor_tick(motor_ramp_t* ramp)
  */
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* htim)
 {
-	/* 只处理 TIM4 的步数限位模式 */
-	if (htim->Instance != TIM4) return;
-	if (g_ramp.state != RAMP_STEP)   return;
-	if (g_ramp.motor == NULL)        return;
 
-	step_motor_t *motor = g_ramp.motor;
-
-	if (g_ramp.step_number > 0) {
-		g_ramp.step_number--;
-	}
-
-	if (g_ramp.step_number == 0) {
-		// 目标步数到达
-		__HAL_TIM_DISABLE_IT(htim, TIM_IT_UPDATE);
-
-		// 关闭PWM
-		step_motor_pwm_off(motor);
-
-		// 状态机回到空闲
-		g_ramp.state        = RAMP_IDLE;
-		g_ramp.freq_current = 0;
-		g_ramp.freq_target  = 0;
-	}
 }
 
 #if !defined(USE_FREE_RTOS)

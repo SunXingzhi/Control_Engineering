@@ -10,17 +10,16 @@ void AngleSensor_Init(AngleSensor* sensor,
                       float k, float b,
                       float filter_coeff)
 {
-    sensor->hadc       = hadc;
-    sensor->Channel    = Channel;
-    sensor->SampleTime = SampleTime;
-    sensor->k          = k;
-    sensor->b          = b;
+	sensor->hadc = hadc;
+	sensor->Channel = Channel;
+	sensor->SampleTime = SampleTime;
+	sensor->k = k;
+	sensor->b = b;
 
-    /* 滤波初始化 */
-    sensor->filter_coeff      = (filter_coeff < 0.0f) ? 0.0f :
-                                (filter_coeff > 1.0f) ? 1.0f : filter_coeff;
-    sensor->filtered_value    = 0.0f;
-    sensor->filter_initialized = 0;
+	/* 滤波初始化 */
+	sensor->filter_coeff = (filter_coeff < 0.0f) ? 0.0f : (filter_coeff > 1.0f) ? 1.0f : filter_coeff;
+	sensor->filtered_value = 0.0f;
+	sensor->filter_initialized = 0;
 }
 
 /**
@@ -28,26 +27,24 @@ void AngleSensor_Init(AngleSensor* sensor,
  */
 uint32_t AngleSensor_ReadRaw(AngleSensor* sensor)
 {
-    ADC_ChannelConfTypeDef sConfig = {0};
-    sConfig.Channel      = sensor->Channel;
-    sConfig.Rank         = ADC_REGULAR_RANK_1;
-    sConfig.SamplingTime = sensor->SampleTime;
+	ADC_ChannelConfTypeDef sConfig = {0};
+	sConfig.Channel = sensor->Channel;
+	sConfig.Rank = ADC_REGULAR_RANK_1;
+	sConfig.SamplingTime = sensor->SampleTime;
 
-    if (HAL_ADC_ConfigChannel(sensor->hadc, &sConfig) != HAL_OK)
-    {
-        return 0;
-    }
+	if (HAL_ADC_ConfigChannel(sensor->hadc, &sConfig) != HAL_OK){
+		return 0;
+	}
 
-    HAL_ADC_Start(sensor->hadc);
-    if (HAL_ADC_PollForConversion(sensor->hadc, 10) != HAL_OK)
-    {
-        HAL_ADC_Stop(sensor->hadc);
-        return 0;
-    }
+	HAL_ADC_Start(sensor->hadc);
+	if (HAL_ADC_PollForConversion(sensor->hadc, 10) != HAL_OK){
+		HAL_ADC_Stop(sensor->hadc);
+		return 0;
+	}
 
-    uint32_t raw = HAL_ADC_GetValue(sensor->hadc);
-    HAL_ADC_Stop(sensor->hadc);
-    return raw;
+	uint32_t raw = HAL_ADC_GetValue(sensor->hadc);
+	HAL_ADC_Stop(sensor->hadc);
+	return raw;
 }
 
 /**
@@ -55,8 +52,8 @@ uint32_t AngleSensor_ReadRaw(AngleSensor* sensor)
  */
 float AngleSensor_GetAngle(AngleSensor* sensor)
 {
-    uint32_t raw = AngleSensor_ReadRaw(sensor);
-    return (float)raw * sensor->k + sensor->b;
+	uint32_t raw = AngleSensor_ReadRaw(sensor);
+	return (float)raw * sensor->k + sensor->b;
 }
 
 /**
@@ -66,21 +63,19 @@ float AngleSensor_GetAngle(AngleSensor* sensor)
  */
 float AngleSensor_GetFilteredAngle(AngleSensor* sensor)
 {
-    float raw_angle = AngleSensor_GetAngle(sensor);
+	float raw_angle = AngleSensor_GetAngle(sensor);
 
-    if (sensor->filter_initialized == 0)
-    {
-        /* 第一次直接用瞬时值初始化，避免从0缓慢上升 */
-        sensor->filtered_value = raw_angle;
-        sensor->filter_initialized = 1;
-    }
-    else
-    {
-        /* 指数移动平均滤波 */
-        sensor->filtered_value = sensor->filter_coeff * raw_angle +
-                                (1.0f - sensor->filter_coeff) * sensor->filtered_value;
-    }
-    return sensor->filtered_value;
+	if (sensor->filter_initialized == 0){
+		/* 第一次直接用瞬时值初始化，避免从0缓慢上升 */
+		sensor->filtered_value = raw_angle;
+		sensor->filter_initialized = 1;
+	}
+	else{
+		/* 指数移动平均滤波 */
+		sensor->filtered_value = sensor->filter_coeff * raw_angle +
+			(1.0f - sensor->filter_coeff) * sensor->filtered_value;
+	}
+	return sensor->filtered_value;
 }
 
 /**
@@ -88,8 +83,8 @@ float AngleSensor_GetFilteredAngle(AngleSensor* sensor)
  */
 void AngleSensor_SetCalibration(AngleSensor* sensor, float k, float b)
 {
-    sensor->k = k;
-    sensor->b = b;
+	sensor->k = k;
+	sensor->b = b;
 }
 
 /**
@@ -97,7 +92,7 @@ void AngleSensor_SetCalibration(AngleSensor* sensor, float k, float b)
  */
 void AngleSensor_SetFilterCoeff(AngleSensor* sensor, float coeff)
 {
-    if (coeff < 0.0f) coeff = 0.0f;
-    if (coeff > 1.0f) coeff = 1.0f;
-    sensor->filter_coeff = coeff;
+	if (coeff < 0.0f) coeff = 0.0f;
+	if (coeff > 1.0f) coeff = 1.0f;
+	sensor->filter_coeff = coeff;
 }
