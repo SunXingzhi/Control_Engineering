@@ -3,27 +3,29 @@
 //
 
 #include "../include/driver_step_motor.h"
-#include <stdbool.h>
 
 #include "main.h"
-
+#include "device.h"
 // 灵活配置tim_clock_freq, 方便后续更改
 uint32_t tim_clock_freq	= 0;
 extern TIM_HandleTypeDef htim4;
 motor_ramp_t g_ramp = {0};
 
-/* ── 前向声明（static 函数定义在后，需提前声明供同文件内调用） ── */
-static device_err_t ramp_step_motor_init(motor_ramp_t* ramp, step_motor_t* motor,
-                                         uint32_t target_freq, uint32_t step_freq, uint32_t hold_ms);
+// 内部函数定义
+static device_err_t ramp_step_motor_init(motor_ramp_t* ramp,
+								step_motor_t* motor,
+								uint32_t target_freq,
+								uint32_t step_freq,
+								uint32_t hold_ms);
 static device_err_t ramp_step_motor_start(motor_ramp_t* ramp);
-void         step_motor_pwm_off(step_motor_t* motor);
+void step_motor_pwm_off(step_motor_t* motor);
 static device_err_t step_motor_set_direction(step_motor_t* motor, motor_direction_t dir);
 
 // ===============================工具函数==============================
 /**
  * @brief  电机转速转换成对应频率
- * @param  motor: 步进电机结构体指针
- * @param  speed: 速度值（单位待定，取决于实际编码器/步进角度映射）
+ * @param  motor_speed_rpm: 转速值（单位: rpm）
+ * @param  step_model: 步进细分模式，决定每转对应的脉冲数
  * @retval 对应的电机频率值
  */
 uint16_t motor_speed_to_freq(float motor_speed_rpm, motor_step_model_t step_model)
@@ -53,7 +55,6 @@ uint16_t motor_speed_to_freq(float motor_speed_rpm, motor_step_model_t step_mode
 	// 如果超过最大电机频率限制, 则限制为最大频率
 	if (frequency>MAX_PWM_FREQUENCY_HZ) return MAX_PWM_FREQUENCY_HZ;
 
-
 	return frequency;
 }
 
@@ -62,7 +63,7 @@ uint16_t motor_speed_to_freq(float motor_speed_rpm, motor_step_model_t step_mode
  * @param  pulse_freq_hz: 此时的脉冲频率
  * @retval 返回对应ARR值
  */
-uint16_t motor_freq_to_arr(const uint16_t pulse_freq_hz)
+inline uint16_t motor_freq_to_arr(uint16_t pulse_freq_hz)
 {
 	if (pulse_freq_hz==0 || tim_clock_freq==0) return 1;
 	return (tim_clock_freq / (htim4.Init.Prescaler + 1) /
@@ -70,9 +71,10 @@ uint16_t motor_freq_to_arr(const uint16_t pulse_freq_hz)
 }
 
 /**
- * @brief 电机频率转换为速度
- * @param freq: 要转换的频率(单位:Hz)
- * @return device_err_t
+ * @brief  电机频率转换为转速
+ * @param  freq:       要转换的频率 (单位: Hz)
+ * @param  step_model: 步进细分模式
+ * @retval 转速值 (单位: rpm)
  */
 uint16_t motor_freq_to_speed(const uint16_t freq, const motor_step_model_t step_model)
 {
@@ -111,24 +113,33 @@ uint16_t motor_freq_to_speed(const uint16_t freq, const motor_step_model_t step_
  */
 device_err_t step_motor_init(step_motor_t* motor)
 {
-	/* 参数检查 */
+	// 参数检查
 	if (motor == NULL) return DRV_ERR_NULL;
 	if (motor->motor_base_info.tim_handle == NULL) return DRV_ERR_PARAM;
 
 
-	/* 启动 PWM 脉冲输出 (默认占空比 50%) */
-	// HAL_TIM_PWM_Start(motor->motor_base_info.tim_handle,
-	//                   motor->motor_base_info.tim_channel);
-
-	/* 初始化电机信息 */
+	// 初始化电机信息
 	motor->step_motor_information.dir = POSITIVE_DIR;
 	motor->step_motor_information.current_frequency = 0;
 	// motor->step_motor_information.target_frequency = 0;
 
 	// 设置步进模式
 	step_motor_set_step_model(motor);
+
+	// 如果使用闭环控制则无需设置斜坡加速, 而是采用PID+输出限幅的操作
+#if (USE_MOTOR_PID_CONTROL==1)
+	// TODO 初始化PID参数
+	// if (PID_init(&motor->motor_pid,
+	// 	motor->motor_pid.Kp,
+	// 	motor->motor_pid.Ki,
+	// 	motor->motor_pid.,
+	// 	)==NULL) return DRV_ERR_NULL;
+#elif (USE_MOTOR_PID_CONTROL==0)
 	// 初始化斜坡参数
 	ramp_step_motor_init(&g_ramp, motor, 0, MOTOR_STEP_LENGH_FREQUENCY_HZ, 0);
+
+#endif
+
 	return DRV_OK;
 }
 
@@ -203,6 +214,11 @@ device_err_t step_motor_set_step_model(step_motor_t* motor)
 	return DRV_OK;
 }
 
+/**
+ * @brief  启动步进电机PWM输出
+ * @param  motor: 步进电机结构体指针
+ * @retval device_err_t
+ */
 device_err_t step_motor_start(step_motor_t* motor)
 {
 	if (motor == NULL){
@@ -222,10 +238,10 @@ device_err_t step_motor_start(step_motor_t* motor)
 }
 
 /**
- * @brief  立即关闭电机(不更改实际状态, 再次调用step_motor_start会恢复之前的速度)
- * @note   调用后立即返回，不阻塞。减速完成后 ramp 状态机会自动切断 PWM
+ * @brief  立即关闭电机（不更改实际状态，再次调用 step_motor_start 会恢复之前的速度）
  * @param  motor: 步进电机结构体指针
  * @retval device_err_t
+ * @note   调用后立即返回，不阻塞。减速完成后 ramp 状态机会自动切断 PWM
  */
 device_err_t step_motor_stop(step_motor_t* motor)
 {
@@ -248,13 +264,13 @@ device_err_t step_motor_stop(step_motor_t* motor)
 
 
 /**
- *
- * @param motor 设置步进电机速度(非阻塞, 可被打断)
- * @param speed 电机转速(单位rpm, 支持浮点数, 但最后在转化频率时会出现小数舍去的情况)
- * @param dir 电机运动方向
- * @return device_err_t	设备操作结果是否成功
- * @note 如果传入的速度与步进模式计算出的频率大于步进电机支持的频率, 则强制转换成该最大频率.
- * 最大频率在driver_step_motor.h
+ * @brief  设置步进电机速度（非阻塞, 可被打断）
+ * @param  motor: 步进电机结构体指针
+ * @param  speed: 电机转速（单位: rpm，支持浮点数，但最后转化频率时小数会舍去）
+ * @param  dir:   电机运动方向
+ * @retval device_err_t
+ * @note   如果传入速度与步进模式计算出的频率大于步进电机支持的最大频率，
+ *         则强制转换为最大频率（MAX_PWM_FREQUENCY_HZ）
  */
 device_err_t step_motor_set_speed(step_motor_t* motor, const float speed, const motor_direction_t dir)
 {
@@ -341,7 +357,7 @@ device_err_t step_motor_move_angle(step_motor_t* motor,
  * @param  angle: 目标角度（°）
  * @retval device_err_t
  */
-device_err_t step_motor_update_angle(const step_motor_t* motor,
+inline device_err_t step_motor_update_angle(const step_motor_t* motor,
                                      motor_direction_t dir,
                                      const float angle)
 {
@@ -384,8 +400,8 @@ device_err_t step_motor_set_pulse_freq(step_motor_t* motor, uint16_t pulse_freq_
 
 /**
  * @brief  设置电机运动方向
- * @param  motor:             步进电机结构体指针
- * @param  absolute_position: 绝对位置步数值
+ * @param  motor: 步进电机结构体指针
+ * @param  dir:   目标运动方向
  * @retval device_err_t
  */
 static device_err_t step_motor_set_direction(step_motor_t* motor, motor_direction_t dir)
@@ -430,6 +446,8 @@ static device_err_t step_motor_set_direction(step_motor_t* motor, motor_directio
 
 /**
  * @brief  内部函数：立即关闭 PWM 并复位电机状态（硬停止）
+ * @param  motor: 步进电机结构体指针
+ * @retval 无
  * @note   仅供 ramp tick 状态机在减速到 0 后调用，不应从外部 API 直接调用
  */
 void step_motor_pwm_off(step_motor_t* motor)
@@ -446,14 +464,15 @@ void step_motor_pwm_off(step_motor_t* motor)
 // ======================== 非阻塞加速斜坡（中断驱动, 步进电机驱动内部使用） ========================
 /**
  * @brief  设置斜坡参数（不启动电机）
- * @param ramp:        斜坡状态机指针
- * @param motor:       步进电机指针
- * @param current_freq: 当前频率 (Hz)
- * @param target_freq: 目标频率 (Hz)
- * @param hold_ms:     到达目标后保持时间 (ms)，0 = 不停留（持续运行）
- * @param state:       初始斜坡状态
+ * @param  ramp:         斜坡状态机指针
+ * @param  motor:        步进电机指针
+ * @param  current_freq: 当前频率 (Hz)
+ * @param  target_freq:  目标频率 (Hz)
+ * @param  step_number:  限位步数（RAMP_STEP 模式下使用，其他模式传 0）
+ * @param  hold_ms:      到达目标后保持时间 (ms)，0 = 不停留（持续运行）
+ * @param  state:        初始斜坡状态
  */
-void ramp_step_motor_set(motor_ramp_t* ramp, step_motor_t* motor,
+inline void ramp_step_motor_set(motor_ramp_t* ramp, step_motor_t* motor,
                          uint32_t current_freq, uint32_t target_freq,
                          uint16_t step_number, uint32_t hold_ms,
                          ramp_state_t state)
@@ -470,12 +489,13 @@ void ramp_step_motor_set(motor_ramp_t* ramp, step_motor_t* motor,
 }
 
 /**
- * @brief  初始化斜坡参数（只有step_motor_init时调用一次)
- * @param ramp:        斜坡状态机指针
- * @param motor:       步进电机指针
- * @param target_freq: 目标频率 (Hz)
- * @param step_freq:   每 tick 频率增量 (Hz)，tick 间隔 5ms
- * @param hold_ms:     到达目标后保持时间 (ms)，0 = 不保持直接结束
+ * @brief  初始化斜坡参数（仅在 step_motor_init 时调用一次）
+ * @param  ramp:         斜坡状态机指针
+ * @param  motor:        步进电机指针
+ * @param  target_freq:  目标频率 (Hz)
+ * @param  step_freq:    每 tick 频率增量 (Hz)，tick 间隔 5ms
+ * @param  hold_ms:      到达目标后保持时间 (ms)，0 = 不保持直接结束
+ * @retval device_err_t
  */
 static device_err_t ramp_step_motor_init(motor_ramp_t* ramp, step_motor_t* motor,
                                          uint32_t target_freq, uint32_t step_freq, uint32_t hold_ms)
@@ -495,11 +515,13 @@ static device_err_t ramp_step_motor_init(motor_ramp_t* ramp, step_motor_t* motor
 }
 
 /**
- * @brief  启动斜坡（加速 → 保持 → 减速 → 停止）
- *         调用后由 ramp_step_motor_tick() 每 5ms 驱动一次
+ * @brief  启动斜坡状态机（加速 → 保持 → 减速 → 停止）
+ * @param  ramp: 斜坡状态机指针
+ * @retval device_err_t
+ * @note   本质上只是切换 ramp 的状态，具体逻辑由 systick 回调中的
+ *         ramp_step_motor_tick() 每 5ms 驱动执行
  * @note   target_freq == 0 且 current_freq > 0 → 直接进入减速到 0
- * 本质上只是切换ramp的状态, 具体不同状态的逻辑由systick回调判断.
- * 同时, 函数假设电机运动方向没有改变.
+ * @note   函数假设电机运动方向未改变
  */
 static device_err_t ramp_step_motor_start(motor_ramp_t* ramp)
 {
@@ -557,12 +579,13 @@ static device_err_t ramp_step_motor_start(motor_ramp_t* ramp)
 
 /**
  * @brief  斜坡状态机 tick（每 5ms 调用一次，从中断/回调中调用）
- *
- * 状态转换:
- *   RAMP_IDLE → (无操作)
- *   RAMP_ACCEL:  freq += step，直到到达 target → RAMP_HOLD
- *   RAMP_HOLD:  计数倒计时                   → RAMP_DECEL
- *   RAMP_DECEL: freq -= step，直到 0          → RAMP_IDLE
+ * @param  ramp: 斜坡状态机指针
+ * @retval device_err_t
+ * @note   状态转换:
+ *   RAMP_IDLE  → (无操作)
+ *   RAMP_ACCEL → freq += step，直到到达 target → RAMP_HOLD
+ *   RAMP_HOLD  → 计数倒计时                    → RAMP_DECEL
+ *   RAMP_DECEL → freq -= step，直到 0          → RAMP_IDLE
  */
 static device_err_t ramp_step_motor_tick(motor_ramp_t* ramp)
 {
@@ -621,19 +644,6 @@ static device_err_t ramp_step_motor_tick(motor_ramp_t* ramp)
 
 
 	return DRV_OK;
-}
-
-/**
- * @brief 重写 TIM4 更新事件回调（仅用于步数限位模式 RAMP_STEP）
- *
- *  @note 每个 PWM 溢出 ⇒ 1 个 STEP 脉冲 ⇒ 本回调触发一次, 计数到达 0 后:
- *  关中断 + 关 PWM + 复位状态机
- *
- * @param htim: 触发回调的 TIM 句柄
- */
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* htim)
-{
-
 }
 
 #if !defined(USE_FREE_RTOS)
