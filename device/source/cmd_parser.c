@@ -4,6 +4,7 @@
  */
 
 #include "../include/cmd_parser.h"
+#include "../include/auto_tune.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -11,6 +12,10 @@
 /* 模块内部状态 */
 static uart_base_t*   s_uart  = NULL;
 static step_motor_t*  s_motor = NULL;
+
+/* 自动调参实例（定义在 main.c 中） */
+extern PID_AutoTune_t tuner;
+extern uint8_t auto_tune_active;
 
 /* 发送字符串的便捷宏 */
 #define SEND_STR(s)   uart_send(s_uart, (uint8_t*)(s), strlen(s))
@@ -46,8 +51,8 @@ void cmd_parser_process(void)
 	uint8_t buf[256];
 	uint16_t n = uart_recv(s_uart, buf, sizeof(buf) - 1);
 	if (n == 0) return;
-
-	buf[n] = '\0';  // 确保字符串结尾
+	// 确保字符串结尾
+	buf[n] = '\0';
 
 	cmd_t cmd = parse_cmd(buf, n);
 	execute_cmd(&cmd);
@@ -67,6 +72,8 @@ void cmd_send_help(uart_base_t* uart)
 	SEND_STR(" P                Stop motor\r\n");
 	SEND_STR(" Q                Query status\r\n");
 	SEND_STR(" M:<mode>         Set step mode (1/2/4/8/16)\r\n");
+	SEND_STR(" T                Start auto-tune (relay method)\r\n");
+	SEND_STR(" R                Query auto-tune result\r\n");
 	SEND_STR(" H                Show this help\r\n");
 	SEND_STR("==============================\r\n");
 
@@ -151,6 +158,16 @@ static cmd_t parse_cmd(const uint8_t* data, uint16_t len)
 		}
 		break;
 
+	case 'T':  // 启动自动调参
+	case 't':
+		cmd.id = CMD_AUTOTUNE_START;
+		break;
+
+	case 'R':  // 查询调参结果
+	case 'r':
+		cmd.id = CMD_AUTOTUNE_RESULT;
+		break;
+
 	case 'H':  // 帮助
 	case 'h':
 		cmd.id = CMD_HELP;
@@ -174,6 +191,7 @@ static void execute_cmd(const cmd_t* cmd)
 	if (cmd == NULL) return;
 
 	switch (cmd->id) {
+	// 设置电机速度命令
 	case CMD_SPEED: {
 		float rpm = cmd->param1;
 		motor_direction_t dir = (cmd->param2 == 2) ? NEGATIVE_DIR : POSITIVE_DIR;
@@ -191,7 +209,7 @@ static void execute_cmd(const cmd_t* cmd)
 		}
 		break;
 	}
-
+	// 指定电机运动角度命令
 	case CMD_ANGLE: {
 		float angle = cmd->param1;
 		motor_direction_t dir = (cmd->param2 == 2) ? NEGATIVE_DIR : POSITIVE_DIR;
@@ -209,7 +227,7 @@ static void execute_cmd(const cmd_t* cmd)
 		}
 		break;
 	}
-
+	// 请求停止命令
 	case CMD_STOP: {
 		device_err_t ret = step_motor_stop(s_motor);
 		if (ret == DRV_OK) {
@@ -219,7 +237,7 @@ static void execute_cmd(const cmd_t* cmd)
 		}
 		break;
 	}
-
+	// 请求当前系统信息命令
 	case CMD_QUERY: {
 		char status[128];
 		step_motor_information_t* info = &s_motor->step_motor_information;
@@ -243,7 +261,7 @@ static void execute_cmd(const cmd_t* cmd)
 		SEND_STR(status);
 		break;
 	}
-
+	// 设置步进模式命令
 	case CMD_STEP_MODEL: {
 		uint8_t mode = cmd->param2;
 		if (mode != 1 && mode != 2 && mode != 4 && mode != 8 && mode != 16) {
@@ -254,6 +272,34 @@ static void execute_cmd(const cmd_t* cmd)
 		s_motor->step_motor_information.step_model = (motor_step_model_t)mode;
 		step_motor_set_step_model(s_motor);
 		send_ok();
+		break;
+	}
+	// 自动调参开始命令
+	case CMD_AUTOTUNE_START: {
+		// 停止电机，重置调参器，启动调参模式
+		step_motor_stop(s_motor);
+		PID_AutoTune_Reset(&tuner);
+		auto_tune_active = 1;
+		SEND_STR("AUTO_TUNE STARTED\r\n");
+		SEND_STR("relay=150rpm hyst=8rpm target=500rpm cycles=8\r\n");
+		break;
+	}
+	// 自动调参获取结果命令
+	case CMD_AUTOTUNE_RESULT: {
+		if (!PID_AutoTune_IsDone(&tuner)) {
+			send_err("auto_tune not done yet");
+			return;
+		}
+		const autotune_result_t* r = PID_AutoTune_GetResult(&tuner);
+		if (r == NULL) {
+			send_err("no result");
+			return;
+		}
+		char buf[128];
+		snprintf(buf, sizeof(buf),
+		         "Tu=%.3fs Ku=%.2f Kp=%.4f Ki=%.4f Kd=%.6f\r\n",
+		         r->Tu, r->Ku, r->Kp, r->Ki, r->Kd);
+		SEND_STR(buf);
 		break;
 	}
 

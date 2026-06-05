@@ -26,6 +26,7 @@
 #include "driver_step_motor.h"
 #include "PID.h"
 #include "mt6701.h"
+#include "auto_tune.h"
 #include "tim.h"
 /* USER CODE END Includes */
 
@@ -66,7 +67,8 @@ extern TIM_HandleTypeDef htim3;
 extern TIM_HandleTypeDef htim4;
 extern UART_HandleTypeDef huart1;
 /* USER CODE BEGIN EV */
-
+extern PID_AutoTune_t tuner;
+extern uint8_t auto_tune_active;
 /* USER CODE END EV */
 
 /******************************************************************************/
@@ -294,7 +296,7 @@ void tim_register_motor(TIM_HandleTypeDef* htim, step_motor_t* motor)
 step_motor_t* find_step_motor_from_tim_table(TIM_HandleTypeDef* htim)
 {
 	// 获取对应索引
-	uint8_t index = TIM_TO_TABLE_INDEX(htim);
+	const uint8_t index = TIM_TO_TABLE_INDEX(htim);
 	return callback_table[index].motor;
 }
 
@@ -304,6 +306,7 @@ step_motor_t* find_step_motor_from_tim_table(TIM_HandleTypeDef* htim)
  */
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* htim)
 {
+
 	angle_sensor_t* s = NULL;
 	step_motor_t* motor = find_step_motor_from_tim_table(htim);
 	// 电机部分: TIM4 更新中断 → 步数限位计数（开环/闭环通用）
@@ -322,7 +325,8 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* htim)
 			}
 		}
 	}
-	// 编码器部分
+
+	// 编码器部分, 周期1ms, (二级倒立摆可能需要改成2ms)
 	else if (htim->Instance == TIM3){
 		if (g_dev == NULL){
 			return;
@@ -343,24 +347,62 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* htim)
 			__enable_irq(); // 使能中断
 		}
 
-		// PID部分
-		// 计算PID参数
-		if (s != NULL || motor != NULL){
-			const float output = PID_calc(&motor->motor_pid, s->speed);
+#if USE_MOTOR_PID_CONTROL==1
+		// ---- PID 控制 / 自动调参（每 2 次采样执行一次，即 2ms 控制周期） ----
+		{
+			static uint8_t pid_tick = 0;
+			if (++pid_tick >= 2){
+				pid_tick = 0;
 
-			if (output == 0){
-				motor->step_motor_information.dir = STOP_DIR;
+				if (motor != NULL && g_dev != NULL){
+					float actual = g_dev->sensor.speed;
+					float output = 0.0f;
+
+					// ---- 自动调参模式 ----
+					if (auto_tune_active && !PID_AutoTune_IsDone(&tuner)){
+						// 继电器调参：输出直接给电机，不经过 PID
+						output = PID_AutoTune_Calc(&tuner, actual, 0.002f);
+						motor_direction_t tune_dir = (output >= 0) ? POSITIVE_DIR : NEGATIVE_DIR;
+						step_motor_set_speed(motor, self_fabs(output), tune_dir);
+						return;  // 调参模式不走下面的 PID 逻辑
+					}
+
+					// ---- 正常 PID 模式 ----
+					output = PID_calc(&motor->motor_pid, actual);
+
+					// 输出限速（防止步进电机启动失步）
+					// max_delta = 20rpm/周期，0→960rpm 约 96ms
+					#define MOTOR_ACCEL_LIMIT  20.0f
+					static float last_output = 0.0f;
+					float delta = output - last_output;
+					if (delta >  MOTOR_ACCEL_LIMIT) delta =  MOTOR_ACCEL_LIMIT;
+					if (delta < -MOTOR_ACCEL_LIMIT) delta = -MOTOR_ACCEL_LIMIT;
+					output = last_output + delta;
+					last_output = output;
+
+					// 输出限幅
+					#define MOTOR_MAX_RPM  960.0f
+					if (output >  MOTOR_MAX_RPM) output =  MOTOR_MAX_RPM;
+					if (output < -MOTOR_MAX_RPM) output = -MOTOR_MAX_RPM;
+
+					// 方向 + 电机输出
+					motor_direction_t dir;
+					float speed_cmd;
+					if (output > 0.0f){
+						dir = POSITIVE_DIR;
+						speed_cmd = output;
+					} else if (output < 0.0f){
+						dir = NEGATIVE_DIR;
+						speed_cmd = -output;
+					} else {
+						dir = STOP_DIR;
+						speed_cmd = 0;
+					}
+					step_motor_set_speed(motor, speed_cmd, dir);
+				}
 			}
-
-			else if (output < 0){
-				motor->motor_pid.Output = -output;
-
-				motor->step_motor_information.dir = NEGATIVE_DIR;
-			}
-
-			step_motor_set_speed(motor, motor->motor_pid.Output, motor->step_motor_information.dir);
-	}
-
+		}
+#endif
 
 	}
 }

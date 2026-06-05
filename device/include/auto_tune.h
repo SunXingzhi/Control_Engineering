@@ -18,7 +18,7 @@
 
 // ======================== 类型定义 ========================
 
-/** 调参状态 */
+// 调参状态
 typedef enum AUTOTUNE_STATE {
 	AUTOTUNE_IDLE = 0,		// 空闲（未启动或已复位）
 	AUTOTUNE_RELAY_HIGH,	// 继电器输出 +d
@@ -26,7 +26,7 @@ typedef enum AUTOTUNE_STATE {
 	AUTOTUNE_DONE			// 调参完成
 } autotune_state_t;
 
-/** 调参结果 */
+// 调参结果
 typedef struct AUTOTUNE_RESULT {
 	float Ku;			// 继电器增益 = 4d / (π * Au)
 	float Tu;			// 振荡周期 (s)
@@ -35,7 +35,7 @@ typedef struct AUTOTUNE_RESULT {
 	float Kd;			// 微分系数
 } autotune_result_t;
 
-/** 继电器调参器实例 */
+// 继电器调参器实例
 typedef struct PID_AUTOTUNE {
 	// ---- 用户配置（Init 时设置） ----
 	float	relay_amplitude;	// 继电器幅值 d（输出 ±d）
@@ -61,6 +61,12 @@ typedef struct PID_AUTOTUNE {
 	autotune_result_t result;	// 调参结果
 } PID_AutoTune_t;
 
+// 定义配置参数(有关单位: RPM)
+#define PRESET_AUTOTUNE_AMPLITUDE		(float)150
+#define PRESET_AUTOTUNE_HYSTERESIS		(float)8
+#define PRESET_AUTOTUNE_SETPOINT		(float)500
+#define PRESET_AUTOTUNE_CYCLES			8
+#define PRESET_AUTOTUNE_MAX_OUTPUT		(float)
 
 // ======================== 公共 API ========================
 

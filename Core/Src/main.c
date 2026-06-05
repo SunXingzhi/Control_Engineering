@@ -30,6 +30,7 @@
 #include "../../device/include/driver_step_motor.h"
 #include "../../device/include/test_step_motor.h"
 #include "../../device/include/test_cmd_motor.h"
+#include "../../device/include/auto_tune.h"
 #include "../../device/include/uart.h"
 /* USER CODE END Includes */
 
@@ -91,6 +92,11 @@ step_motor_t motor = {
 		.dir = POSITIVE_DIR,
 	}
 };
+
+// 自动调参实例
+PID_AutoTune_t tuner;
+uint8_t auto_tune_active = 0;  // 1=调参模式, 0=正常PID模式
+
 /* USER CODE END 0 */
 
 /**
@@ -134,10 +140,16 @@ int main(void)
 		Error_Handler();
 	}
 
+	// 初始化自动调参（默认关闭，通过串口命令启动）
+	PID_AutoTune_Init(&tuner,
+				PRESET_AUTOTUNE_AMPLITUDE,
+				PRESET_AUTOTUNE_HYSTERESIS,
+				PRESET_AUTOTUNE_SETPOINT,
+				PRESET_AUTOTUNE_CYCLES);
+
 	// 初始化串口命令测试（替代阻塞式单元测试）
 	test_cmd_motor_init(&motor, &uart1);
-	step_motor_set_speed(&motor, 10, POSITIVE_DIR);
-	// test_step_motor_run_all(&motor);
+
 	/* USER CODE END 2 */
 
 	/* Infinite loop */

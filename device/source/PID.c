@@ -47,3 +47,13 @@ float PID_calc(PID_t* pid, float actual)
 {
 	return pid->interface->calc(pid, actual);
 }
+
+void PID_reset(PID_t* pid)
+{
+	return pid->interface->reset(pid);
+}
+
+void PID_destroy(PID_t* pid)
+{
+	return pid->interface->destroy(pid);
+}

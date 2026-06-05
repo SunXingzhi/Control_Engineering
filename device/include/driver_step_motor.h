@@ -75,25 +75,6 @@
 	} motor_ramp_t;
 #endif
 
-#define PWM_DEFAULT_DUTY_CYCLE			50u	// 默认50, 若要更改需要确定实际脉冲时间是否大于1µs
-#define DEFAULT_STEP_MOTOR_DRIVER_MODEL		HR4988
-
-// 电机参数配置
-#define START_UP_PWM_FREQUENCY_HZ		1062	// 测量环境24V, 带同步轮
-#define DEFAULT_MOTOR_FREQUENCY_HZ		500	// 默认电机频率
-#define MAX_PWM_FREQUENCY_HZ			3215	// 电机测量的最大PWM频率
-#define MOTOR_STEP_LENGH_FREQUENCY_HZ		210
-#define	FULL_UP_STEP_LENTH_ANGLE		1.8f	// 单位:度
-
-// 电机速度控制算法参数配置
-#define CONTROL_CYCLE_MS			2u	// 倒立摆推荐控制周期)
-// 电机PID输出限幅 单位: m/s
-#define MOTOR_PID_OUTPUT_MAX(motor_step_model)	motor_freq_to_speed(MOTOR_STEP_LENGH_FREQUENCY_HZ, motor_step_model)
-#define MOTOR_PID_OUTPUT_MIN			(float)0
-
-static const float PWM_PULSE_TIME_MIN = 0.00001f; // A4988驱动要求STEP脉冲最小要大于1e-6s
-
-
 // 支持的电机驱动枚举
 typedef enum motor_driver_model{
 	A4988,
@@ -164,6 +145,26 @@ typedef struct step_motor{
 #endif
 } step_motor_t;
 
+// 相关参数定义
+#define PWM_DEFAULT_DUTY_CYCLE			50u	// 默认50, 若要更改需要确定实际脉冲时间是否大于1µs
+#define DEFAULT_STEP_MOTOR_DRIVER_MODEL		HR4988
+
+// 电机参数配置
+#define START_UP_PWM_FREQUENCY_HZ		1062	// 测量环境24V, 带同步轮
+#define DEFAULT_MOTOR_FREQUENCY_HZ		500	// 默认电机频率
+#define MAX_PWM_FREQUENCY_HZ			3215	// 电机测量的最大PWM频率
+#define MOTOR_STEP_LENGTH_FREQUENCY_HZ		210
+#define	FULL_UP_STEP_LENGTH_ANGLE		1.8f	// 单位:度
+
+// 电机速度控制算法参数配置
+#define CONTROL_CYCLE_MS			2u	// 倒立摆推荐控制周期)
+// 电机PID输出限幅 单位: m/s
+#define MOTOR_PID_OUTPUT_MAX(motor_step_model)	motor_freq_to_speed(MOTOR_STEP_LENGTH_FREQUENCY_HZ, motor_step_model)
+#define MOTOR_PID_OUTPUT_MIN			(float)0
+
+static const float PWM_PULSE_TIME_MIN = 0.00001f; // A4988驱动要求STEP脉冲最小要大于1e-6s
+
+
 // 工具函数
 uint16_t motor_speed_to_freq(float motor_speed_rpm, motor_step_model_t step_model);
 uint16_t motor_freq_to_arr(uint16_t pulse_freq_hz);
@@ -176,21 +177,20 @@ device_err_t step_motor_deinit(step_motor_t* motor);
 device_err_t step_motor_set_step_model(step_motor_t* motor);
 device_err_t step_motor_start(step_motor_t* motor);
 device_err_t step_motor_stop(step_motor_t* motor);
-// device_err_t step_motor_set_speed_size(step_motor_t* motor, uint32_t speed);
 device_err_t step_motor_set_speed(step_motor_t* motor,
-				const float speed,
-				const motor_direction_t dir);
+				float speed,
+				motor_direction_t dir);
 device_err_t step_motor_move_angle(step_motor_t* motor, motor_direction_t dir, float angle);
-device_err_t step_motor_update_angle(const step_motor_t* motor, motor_direction_t dir,
-                                     const float angle);
 device_err_t step_motor_set_pulse_freq(step_motor_t* motor, uint16_t pulse_freq_hz);
-
-device_err_t step_motor_set_absolute_position(step_motor_t* motor, const uint32_t absolute_position);
 void         step_motor_pwm_off(step_motor_t* motor);
-void ramp_step_motor_set(motor_ramp_t* ramp,
-		uint32_t current_freq,
-		uint32_t target_freq,
-		uint16_t step_number,
-		uint32_t hold_ms, ramp_state_t state);
+
+#if (USE_MOTOR_PID_CONTROL==0)
+	void ramp_step_motor_set(motor_ramp_t* ramp,
+			uint32_t current_freq,
+			uint32_t target_freq,
+			uint16_t step_number,
+			uint32_t hold_ms, ramp_state_t state);
+	device_err_t ramp_step_motor_tick(motor_ramp_t* ramp, step_motor_t* motor);
+#endif
 
 #endif //TWO_LINK_DRIVER_STEP_MOTOR_H

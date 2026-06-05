@@ -8,6 +8,8 @@
  *   P                   停止电机
  *   Q                   查询电机状态
  *   M:<mode>            设置细分模式（1/2/4/8/16）
+ *   T                   启动自动调参（继电器法）
+ *   R                   查询自动调参结果
  *   H                   显示帮助
  *
  * 应答:
@@ -31,6 +33,8 @@ typedef enum CMD_ID {
 	CMD_STOP,		// P
 	CMD_QUERY,		// Q
 	CMD_STEP_MODEL,		// M:<mode>
+	CMD_AUTOTUNE_START,	// T
+	CMD_AUTOTUNE_RESULT,	// R
 	CMD_HELP,		// H
 } cmd_id_t;
 
