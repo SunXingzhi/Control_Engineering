@@ -4,8 +4,8 @@
  */
 #ifndef __PID_H__
 #define __PID_H__
-#include "device.h"
-#include "driver_step_motor.h"
+#include <stdint.h>
+// #include "driver_step_motor.h"
 
 typedef enum PID_TYPE{
 	PID_MOTOR_POSITION,	// 步进电机位置环
@@ -17,7 +17,7 @@ typedef enum PID_TYPE{
  * 例如步进电机参数需要了解步进模式是X细分. 角度传感器了解XX...
  */
 typedef union PID_TYPE_ARGS{
-	motor_step_model_t	motor_step_model;
+	int32_t	motor_step_model;
 } PID_type_args_t;
 
 typedef struct PID{
