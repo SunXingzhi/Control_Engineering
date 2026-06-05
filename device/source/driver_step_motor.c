@@ -6,18 +6,22 @@
 
 #include "main.h"
 #include "device.h"
+#include "PID.h"
+#include "stm32f1xx_it.h"
+
 // 灵活配置tim_clock_freq, 方便后续更改
 uint32_t tim_clock_freq	= 0;
 extern TIM_HandleTypeDef htim4;
-motor_ramp_t g_ramp = {0};
-
 // 内部函数定义
+#if USE_MOTOR_PID_CONTROL==0
 static device_err_t ramp_step_motor_init(motor_ramp_t* ramp,
-								step_motor_t* motor,
 								uint32_t target_freq,
 								uint32_t step_freq,
 								uint32_t hold_ms);
-static device_err_t ramp_step_motor_start(motor_ramp_t* ramp);
+static device_err_t ramp_step_motor_start(motor_ramp_t* ramp, step_motor_t* motor);
+static device_err_t ramp_step_motor_tick(motor_ramp_t* ramp, step_motor_t* motor);
+#endif
+
 void step_motor_pwm_off(step_motor_t* motor);
 static device_err_t step_motor_set_direction(step_motor_t* motor, motor_direction_t dir);
 
@@ -129,14 +133,20 @@ device_err_t step_motor_init(step_motor_t* motor)
 	// 如果使用闭环控制则无需设置斜坡加速, 而是采用PID+输出限幅的操作
 #if (USE_MOTOR_PID_CONTROL==1)
 	// TODO 初始化PID参数
-	// if (PID_init(&motor->motor_pid,
-	// 	motor->motor_pid.Kp,
-	// 	motor->motor_pid.Ki,
-	// 	motor->motor_pid.,
-	// 	)==NULL) return DRV_ERR_NULL;
+	motor->motor_pid	= *PID_init(&motor->motor_pid,
+				PID_INCREMENTAL,
+				&(motor->step_motor_information.step_model),
+				0,
+				0,
+				0,
+				MOTOR_PID_OUTPUT_MAX(motor->step_motor_information.step_model),
+				MOTOR_PID_OUTPUT_MIN
+			);
+	// 注册实例
+	tim_register_motor(&htim4, motor);
 #elif (USE_MOTOR_PID_CONTROL==0)
 	// 初始化斜坡参数
-	ramp_step_motor_init(&g_ramp, motor, 0, MOTOR_STEP_LENGH_FREQUENCY_HZ, 0);
+	ramp_step_motor_init(&motor->ramp, 0, MOTOR_STEP_LENGH_FREQUENCY_HZ, 0);
 
 #endif
 
@@ -252,12 +262,15 @@ device_err_t step_motor_stop(step_motor_t* motor)
 	motor->step_motor_information.current_frequency	= 0;
 	motor->step_motor_information.dir		= STOP_DIR;
 	motor->step_motor_information.dir_state		= DIR_NORMAL;
+	motor->step_motor_information.step_remaining	= 0;
 
+#if USE_MOTOR_PID_CONTROL==0
 	// 清除斜坡状态机，防止 SysTick 回调继续用旧状态操作定时器
-	g_ramp.state        = RAMP_IDLE;
-	g_ramp.freq_current = 0;
-	g_ramp.freq_target  = 0;
-	g_ramp.step_number  = 0;
+	motor->ramp.state        = RAMP_IDLE;
+	motor->ramp.freq_current = 0;
+	motor->ramp.freq_target  = 0;
+	motor->ramp.step_number  = 0;
+#endif
 
 	return DRV_OK;
 }
@@ -274,12 +287,23 @@ device_err_t step_motor_stop(step_motor_t* motor)
  */
 device_err_t step_motor_set_speed(step_motor_t* motor, const float speed, const motor_direction_t dir)
 {
+	float converted_speed	= 0;
 	if (motor == NULL) return DRV_ERR_NULL;
 	if (dir>STOP_DIR) return DRV_ERR_PARAM;
 
 	// 如果需要换向，先停止电机（防止电流冲击），方向由 set_direction 在停车后设置
 	if (motor->step_motor_information.dir != dir) step_motor_stop(motor);
 
+	// 如果目标速度为0, 停止电机, 并且不设计斜坡/PID控制
+	if (speed==0){
+		step_motor_stop(motor);
+		motor->step_motor_information.dir	= STOP_DIR;
+		return DRV_OK;
+	}
+	else if (speed<0){
+		converted_speed	= -speed;
+	}
+	converted_speed	= speed;
 	// 设置电机方向（step_motor_stop 后 current_frequency=0，方向已空闲）
 	step_motor_set_direction(motor, dir);
 
@@ -289,16 +313,29 @@ device_err_t step_motor_set_speed(step_motor_t* motor, const float speed, const 
 	if (target_freq == 0) return DRV_ERR_PARAM;
 	// 如果频率过大, 设置为支持的电机最大频率
 	if (target_freq>MAX_PWM_FREQUENCY_HZ) target_freq	= MAX_PWM_FREQUENCY_HZ;
+#if DEBUG==1
+	printf("[DEBUG] set the motor.\n");
+#endif
 
+#if USE_MOTOR_PID_CONTROL==0
+	// 如果不使用闭环控制, 则需要设置
 	// 配置斜坡参数（ACCEL/DECEL 判断交给 start 根据 ramp 内部 freq 完成.
-
-	ramp_step_motor_set(&g_ramp, motor,
+	ramp_step_motor_set(&motor->ramp,
 	                    0,		// current_freq: stop 后已归零，从 0 加速到 target
 	                    target_freq, 0,
 	                    0, RAMP_IDLE);	// 此时ramp->state不重要
 
 	// 启动斜坡（start 内部根据 freq_current/target 自动选 ACCEL/DECEL）
-	return ramp_step_motor_start(&g_ramp);
+	return ramp_step_motor_start(&motor->ramp, motor);
+#elif USE_MOTOR_PID_CONTROL==1
+	// 设置PID内容(pid的target是转速, 单位rpm)
+	__disable_irq();
+	motor->motor_pid.Target	= speed;
+	__enable_irq();
+	// 设置电机速度
+	step_motor_set_pulse_freq(motor, target_freq);
+#endif
+	return  DRV_OK;
 }
 
 /**
@@ -329,11 +366,9 @@ device_err_t step_motor_move_angle(step_motor_t* motor,
 
 	// 设置方向
 	step_motor_set_direction(motor, dir);
-	// 配置ramp参数
-	ramp_step_motor_set(&g_ramp, motor,
-	                    freq, freq,
-	                    (uint16_t)pulses,  // step_number
-	                    0, RAMP_STEP);
+
+	// 设置步数限位（开环/闭环通用）
+	motor->step_motor_information.step_remaining = pulses;
 
 	// 设置脉冲频率（内部 EGR=UG 会置位 UIF 并清零计数器）
 	step_motor_set_pulse_freq(motor, freq);
@@ -351,8 +386,8 @@ device_err_t step_motor_move_angle(step_motor_t* motor,
 
 /**
  * @brief  更新角度——根据目标角度运动（倒立摆控制用）
- * @note   当前实现为 move_angle 的快捷封装
- * @param  motor: 步进电机指针（const，内部通过全局 g_ramp 访问）
+ * @note   move_angle 的快捷封装
+ * @param  motor: 步进电机指针（const，内部转为非 const 传递）
  * @param  dir:   运动方向
  * @param  angle: 目标角度（°）
  * @retval device_err_t
@@ -362,9 +397,8 @@ inline device_err_t step_motor_update_angle(const step_motor_t* motor,
                                      const float angle)
 {
 	if (motor == NULL || angle <= 0.0f) return DRV_ERR_NULL;
-	if (g_ramp.motor == NULL || g_ramp.motor != motor) return DRV_ERR_PARAM;
 
-	return step_motor_move_angle(g_ramp.motor, dir, angle);
+	return step_motor_move_angle((step_motor_t*)motor, dir, angle);
 }
 
 /**
@@ -460,26 +494,24 @@ void step_motor_pwm_off(step_motor_t* motor)
 }
 
 
-
+#if USE_MOTOR_PID_CONTROL==0
 // ======================== 非阻塞加速斜坡（中断驱动, 步进电机驱动内部使用） ========================
 /**
  * @brief  设置斜坡参数（不启动电机）
  * @param  ramp:         斜坡状态机指针
- * @param  motor:        步进电机指针
  * @param  current_freq: 当前频率 (Hz)
  * @param  target_freq:  目标频率 (Hz)
  * @param  step_number:  限位步数（RAMP_STEP 模式下使用，其他模式传 0）
  * @param  hold_ms:      到达目标后保持时间 (ms)，0 = 不停留（持续运行）
  * @param  state:        初始斜坡状态
  */
-inline void ramp_step_motor_set(motor_ramp_t* ramp, step_motor_t* motor,
+inline void ramp_step_motor_set(motor_ramp_t* ramp,
                          uint32_t current_freq, uint32_t target_freq,
                          uint16_t step_number, uint32_t hold_ms,
                          ramp_state_t state)
 {
 
 	ramp->state		= state;
-	ramp->motor		= motor;
 	ramp->freq_current	= current_freq;
 	ramp->freq_target	= target_freq;
 	ramp->freq_step		= MOTOR_STEP_LENGH_FREQUENCY_HZ;
@@ -491,20 +523,19 @@ inline void ramp_step_motor_set(motor_ramp_t* ramp, step_motor_t* motor,
 /**
  * @brief  初始化斜坡参数（仅在 step_motor_init 时调用一次）
  * @param  ramp:         斜坡状态机指针
- * @param  motor:        步进电机指针
  * @param  target_freq:  目标频率 (Hz)
  * @param  step_freq:    每 tick 频率增量 (Hz)，tick 间隔 5ms
  * @param  hold_ms:      到达目标后保持时间 (ms)，0 = 不保持直接结束
  * @retval device_err_t
  */
-static device_err_t ramp_step_motor_init(motor_ramp_t* ramp, step_motor_t* motor,
+
+static device_err_t ramp_step_motor_init(motor_ramp_t* ramp,
                                          uint32_t target_freq, uint32_t step_freq, uint32_t hold_ms)
 {
 	if (ramp==NULL){
 		return DRV_ERR_NULL;
 	}
 	ramp->state       = RAMP_IDLE;
-	ramp->motor       = motor;
 	ramp->freq_current = 0;
 	ramp->freq_target  = target_freq;
 	ramp->freq_step    = step_freq;
@@ -514,18 +545,20 @@ static device_err_t ramp_step_motor_init(motor_ramp_t* ramp, step_motor_t* motor
 	return DRV_OK;
 }
 
+
 /**
  * @brief  启动斜坡状态机（加速 → 保持 → 减速 → 停止）
- * @param  ramp: 斜坡状态机指针
+ * @param  ramp:  斜坡状态机指针
+ * @param  motor: 步进电机指针
  * @retval device_err_t
  * @note   本质上只是切换 ramp 的状态，具体逻辑由 systick 回调中的
  *         ramp_step_motor_tick() 每 5ms 驱动执行
  * @note   target_freq == 0 且 current_freq > 0 → 直接进入减速到 0
  * @note   函数假设电机运动方向未改变
  */
-static device_err_t ramp_step_motor_start(motor_ramp_t* ramp)
+static device_err_t ramp_step_motor_start(motor_ramp_t* ramp, step_motor_t* motor)
 {
-	if (ramp->motor == NULL) {
+	if (motor == NULL) {
 		return DRV_ERR_NULL;
 	}
 	if (ramp->freq_target == 0 && ramp->freq_current == 0) {
@@ -534,13 +567,13 @@ static device_err_t ramp_step_motor_start(motor_ramp_t* ramp)
 	}
 	if (ramp->freq_target == 0 && ramp->freq_current > 0) {
 		// 减速到 0，需要先确保 PWM 已开启
-		step_motor_start(ramp->motor);
+		step_motor_start(motor);
 		ramp->state = RAMP_DECEL;
 		return DRV_OK;
 	}
 
 	// 开启PWM输出
-	step_motor_start(ramp->motor);
+	step_motor_start(motor);
 	// 设置状态：根据 freq_target 和 freq_current 确定是加速还是减速
 	if (ramp->freq_target > ramp->freq_current) {
 		ramp->state = RAMP_ACCEL;
@@ -555,31 +588,9 @@ static device_err_t ramp_step_motor_start(motor_ramp_t* ramp)
 }
 
 /**
- * @brief  非阻塞停止：设置减速斜坡到 0，由 ramp tick 驱动减速 → 自动关 PWM
- * @note   调用后立即返回，不阻塞。减速完成后 ramp 状态机会自动切断 PWM
- * @param  motor: 步进电机结构体指针
- * @retval device_err_t
- */
-// static device_err_t ramp_step_motor_stop(motor_ramp_t* ramp)
-// {
-// 	if (ramp==NULL || ramp->motor==NULL) return DRV_ERR_NULL;
-//
-// 	ramp->motor->step_motor_information.dir_state	= DIR_STOPPING;
-//
-// 	// 设置减速斜坡：从当前频率降到 0
-// 	ramp_step_motor_set(&g_ramp,
-// 		ramp->motor,
-// 		ramp->motor->step_motor_information.current_frequency,
-// 		0,
-// 		0,
-// 		0, RAMP_DECEL);
-//
-// 	return ramp_step_motor_start(&g_ramp);
-// }
-
-/**
  * @brief  斜坡状态机 tick（每 5ms 调用一次，从中断/回调中调用）
- * @param  ramp: 斜坡状态机指针
+ * @param  ramp:  斜坡状态机指针
+ * @param  motor: 步进电机指针
  * @retval device_err_t
  * @note   状态转换:
  *   RAMP_IDLE  → (无操作)
@@ -587,7 +598,7 @@ static device_err_t ramp_step_motor_start(motor_ramp_t* ramp)
  *   RAMP_HOLD  → 计数倒计时                    → RAMP_DECEL
  *   RAMP_DECEL → freq -= step，直到 0          → RAMP_IDLE
  */
-static device_err_t ramp_step_motor_tick(motor_ramp_t* ramp)
+static device_err_t ramp_step_motor_tick(motor_ramp_t* ramp, step_motor_t* motor)
 {
 	if (ramp->state == RAMP_IDLE || ramp->state == RAMP_DONE) {
 		return DRV_OK;
@@ -606,18 +617,15 @@ static device_err_t ramp_step_motor_tick(motor_ramp_t* ramp)
 			// TODO: 此时一直是加速状态.
 			// hold_target==0 → 保持当前速度，不再自动进入 DECEL
 		}
-		step_motor_set_pulse_freq(ramp->motor, ramp->freq_current);
+		step_motor_set_pulse_freq(motor, ramp->freq_current);
 		break;
 
 	case RAMP_HOLD:
 		if (ramp->hold_ticks > 0) {
 			ramp->hold_ticks--;
-		}
-		// 继续保持速度
-		else if (ramp->hold_ticks==0){
-			break;
-		} else {
-			ramp->state = RAMP_DECEL;
+			if (ramp->hold_ticks == 0) {
+				ramp->state = RAMP_DECEL;  // 倒数结束，开始减速
+			}
 		}
 		break;
 
@@ -628,11 +636,11 @@ static device_err_t ramp_step_motor_tick(motor_ramp_t* ramp)
 			ramp->freq_current = 0;
 			ramp->state = RAMP_IDLE;
 		}
-		step_motor_set_pulse_freq(ramp->motor, ramp->freq_current);
+		step_motor_set_pulse_freq(motor, ramp->freq_current);
 		if (ramp->freq_current == 0) {
 			// 关闭硬件输出, 省资源
-			step_motor_pwm_off(ramp->motor);
-			ramp->motor->step_motor_information.dir_state	= DIR_NORMAL;
+			step_motor_pwm_off(motor);
+			motor->step_motor_information.dir_state	= DIR_NORMAL;
 		}
 		break;
 	case RAMP_STEP:
@@ -645,18 +653,6 @@ static device_err_t ramp_step_motor_tick(motor_ramp_t* ramp)
 
 	return DRV_OK;
 }
-
-#if !defined(USE_FREE_RTOS)
-	/**
-	 * @brief  SysTick 每 1ms 回调 → 每 5ms 驱动一次斜坡状态机
-	 *         HAL_IncTick() → HAL_SYSTICK_Callback() 由中断自动调用
-	 */
-	void HAL_SYSTICK_Callback(void)
-	{
-		static uint8_t tick_cnt = 0;
-		if (++tick_cnt >= 5){
-			tick_cnt = 0;
-			ramp_step_motor_tick(&g_ramp);
-		}
-	}
 #endif
+
+

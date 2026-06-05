@@ -18,11 +18,15 @@
 /* USER CODE END Header */
 
 /* Includes ------------------------------------------------------------------*/
-#include "stm32f1xx_it.h"
 #include "main.h"
+#include "stm32f1xx_it.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "../../device/include/uart.h"
+#include "driver_step_motor.h"
+#include "PID.h"
+#include "mt6701.h"
+#include "tim.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -77,9 +81,8 @@ void NMI_Handler(void)
 
   /* USER CODE END NonMaskableInt_IRQn 0 */
   /* USER CODE BEGIN NonMaskableInt_IRQn 1 */
-   while (1)
-  {
-  }
+	while (1){
+	}
   /* USER CODE END NonMaskableInt_IRQn 1 */
 }
 
@@ -192,7 +195,7 @@ void SysTick_Handler(void)
   /* USER CODE END SysTick_IRQn 0 */
   HAL_IncTick();
   /* USER CODE BEGIN SysTick_IRQn 1 */
-  HAL_SYSTICK_Callback();
+	HAL_SYSTICK_Callback();
   /* USER CODE END SysTick_IRQn 1 */
 }
 
@@ -265,7 +268,7 @@ void TIM4_IRQHandler(void)
 void USART1_IRQHandler(void)
 {
   /* USER CODE BEGIN USART1_IRQn 0 */
-  if (uart_idle_hook(&huart1)) return;
+	if (uart_idle_hook(&huart1)) return;
   /* USER CODE END USART1_IRQn 0 */
   HAL_UART_IRQHandler(&huart1);
   /* USER CODE BEGIN USART1_IRQn 1 */
@@ -274,5 +277,115 @@ void USART1_IRQHandler(void)
 }
 
 /* USER CODE BEGIN 1 */
+extern mt6701_t* encoder;
+// 创建TIM回调对应功能实例
+static tim_callback_entry_t callback_table[8] = {0}; // 最多8个TIM实例, TIM1-TIM8
 
+extern mt6701_t* g_dev;
+
+void tim_register_motor(TIM_HandleTypeDef* htim, step_motor_t* motor)
+{
+	uint8_t index = TIM_TO_TABLE_INDEX(htim);
+	if (index != TIM_TABLE_ERROR_INDEX){
+		callback_table[index].motor = motor;
+	}
+}
+
+step_motor_t* find_step_motor_from_tim_table(TIM_HandleTypeDef* htim)
+{
+	// 获取对应索引
+	uint8_t index = TIM_TO_TABLE_INDEX(htim);
+	return callback_table[index].motor;
+}
+
+/**
+ * @brief TIM中断回调函数. 目前步进电机用到了TIM3 CH1作为PWM输出, 同时编码器使用TIM4普通计时器模式来计算编码器捕获到的角速度.
+ * @param htim
+ */
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* htim)
+{
+	angle_sensor_t* s = NULL;
+	step_motor_t* motor = find_step_motor_from_tim_table(htim);
+	// 电机部分: TIM4 更新中断 → 步数限位计数（开环/闭环通用）
+	if (htim->Instance == TIM4){
+		if (motor != NULL){
+			step_motor_information_t* info = &motor->step_motor_information;
+
+			if (info->step_remaining > 0){
+				info->step_remaining--;
+			}
+
+			if (info->step_remaining == 0){
+				// 目标步数到达：关中断 + 关 PWM
+				__HAL_TIM_DISABLE_IT(htim, TIM_IT_UPDATE);
+				step_motor_pwm_off(motor);
+			}
+		}
+	}
+	// 编码器部分
+	else if (htim->Instance == TIM3){
+		if (g_dev == NULL){
+			return;
+		}
+		if (htim->Instance == g_dev->sensor.htim->Instance){
+			s = &g_dev->sensor;
+
+			if (s->first_sample){
+				s->first_sample = 0;
+				s->angle_last = s->angle;
+			}
+
+			float diff = cycle_diff(s->angle - s->angle_last, MT6701_ANGLE_MAX);
+			__disable_irq(); // 禁用中断
+			s->angle_last = s->angle;
+			s->speed = diff * speed_calc_freq;
+			s->speed_raw = (int32_t)(s->speed * 100.0f * (180.0f / 3.1415926f));
+			__enable_irq(); // 使能中断
+		}
+
+		// PID部分
+		// 计算PID参数
+		if (s != NULL || motor != NULL){
+			const float output = PID_calc(&motor->motor_pid, s->speed);
+
+			if (output == 0){
+				motor->step_motor_information.dir = STOP_DIR;
+			}
+
+			else if (output < 0){
+				motor->motor_pid.Output = -output;
+
+				motor->step_motor_information.dir = NEGATIVE_DIR;
+			}
+
+			step_motor_set_speed(motor, motor->motor_pid.Output, motor->step_motor_information.dir);
+	}
+
+
+	}
+}
+
+#if !defined(USE_FREE_RTOS)
+	#if USE_MOTOR_PID_CONTROL==0
+		/**
+		 * @brief  SysTick 每 1ms 回调 → 每 5ms 驱动一次斜坡状态机
+		 *         HAL_IncTick() → HAL_SYSTICK_Callback() 由中断自动调用
+		 */
+		extern step_motor_t motor;
+		void HAL_SYSTICK_Callback(void)
+		{
+			static uint8_t tick_cnt = 0;
+			if (++tick_cnt >= 5){
+				tick_cnt = 0;
+				ramp_step_motor_tick(&motor.ramp, &motor);
+			}
+		}
+	#elif USE_MOTOR_PID_CONTROL==1
+		void HAL_SYSTICK_Callback(void)
+		{
+			// 相关裸机...
+
+		}
+	#endif
+#endif
 /* USER CODE END 1 */

@@ -27,11 +27,22 @@ extern "C" {
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "driver_step_motor.h"
+#include "mt6701.h"
+#define TIM_TABLE_ERROR_INDEX		0XFF
+#define TIM_TO_TABLE_INDEX(htim)	(((htim)->Instance == TIM1)? 0: \
+((htim)->Instance == TIM2)? 1: \
+((htim)->Instance == TIM3)? 2: \
+((htim)->Instance == TIM4)? 3: TIM_TABLE_ERROR_INDEX)
 
 /* USER CODE END Includes */
 
 /* Exported types ------------------------------------------------------------*/
 /* USER CODE BEGIN ET */
+typedef struct {
+  step_motor_t*   motor;
+  // mt6701_t*       sensor;
+} tim_callback_entry_t;
 
 /* USER CODE END ET */
 
@@ -61,7 +72,8 @@ void TIM3_IRQHandler(void);
 void TIM4_IRQHandler(void);
 void USART1_IRQHandler(void);
 /* USER CODE BEGIN EFP */
-
+inline step_motor_t* find_step_motor_from_tim_table(TIM_HandleTypeDef* htim);
+void tim_register_motor(TIM_HandleTypeDef* htim, step_motor_t* motor);
 /* USER CODE END EFP */
 
 #ifdef __cplusplus
