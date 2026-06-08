@@ -90,13 +90,14 @@ typedef struct step_motor step_motor_t;
 #define PWM_DEFAULT_DUTY_CYCLE			50u	// 默认50, 若要更改需要确定实际脉冲时间是否大于1µs
 #define DEFAULT_STEP_MOTOR_DRIVER_MODEL		HR4988
 
-// 电机参数配置
-#define START_UP_PWM_FREQUENCY_HZ		1062	// 测量环境24V, 带同步轮
+// 电机参数配置 测量环境24V, 带同步轮
+#define START_UP_PWM_FREQUENCY_HZ		1062	// 步进电机启动频率
 #define DEFAULT_MOTOR_FREQUENCY_HZ		500	// 默认电机频率
 #define MAX_PWM_FREQUENCY_HZ			3215	// 电机测量的最大PWM频率
 #define MOTOR_STEP_LENGH_FREQUENCY_HZ		210
 #define	FULL_UP_STEP_LENTH_ANGLE		1.8f	// 单位:度
 
+#define MOTOR_SPEED_MIN				30	// 电机最小速度(全步进模式, 单位RPM)
 // 电机速度控制算法参数配置
 #define CONTROL_CYCLE_MS			2u	// 倒立摆推荐控制周期)
 #define MOTOR_PID_OUTPUT_MAX				// 单位: m/s

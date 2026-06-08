@@ -21,7 +21,7 @@ typedef enum device_err{
 } device_err_t;
 
 // 电机相关配置信息(比如是否使用rtos, 定时器等等)
-#define USE_MOTOR_PID_CONTROL	1
+#define USE_MOTOR_PID_CONTROL	0
 //#define USE_FREERTOS			// 判断系统是否使用FreeRTOS
 
 
