@@ -30,6 +30,8 @@
 #include "../../device/include/driver_step_motor.h"
 #include "../../device/include/test_step_motor.h"
 #include "../../device/include/uart.h"
+#include "mt6701.h"
+#include "angle_sensor.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -135,16 +137,38 @@ int main(void)
 		Error_Handler();
 	}
 
-	/* 运行全部单元测试
-	 * 测试1: 电机调速 (step_motor_set_speed)
-	 * 测试2: 指定角度 (step_motor_move_angle)
-	 * 测试3: 电机方向更改
-	 * 测试4: 持续运行 + 周期性换向
-	 * 测试5: 设置不同步长模式
-	 * 123456
-	 */
-	// test_step_motor_run_all(&motor);
-	step_motor_set_speed(&motor, 30, POSITIVE_DIR);
+	/* 初始化编码器 */
+	mt6701_t encorder = {
+		.sensor = {
+			.hspi			= &hspi1,
+			.cs_gpiox		= GPIOA,
+			.cs_gpio_pin	= GPIO_PIN_4,
+			.htim			= &htim3,
+		}
+	};
+
+	if (angle_sensor_init(&encorder) != DRV_OK)
+	{
+		Error_Handler();
+	}
+
+	float	total_angle = 0.0f;
+	float	angle = 0.0f;
+	float	speed = 0.0f;
+
+	/* 初始化角度传感器 */
+	AngleSensor sensor1 = {0};
+
+	AngleSensor_Init (	&sensor1,
+						&hadc1,
+						ADC_CHANNEL_0,
+						ADC_SAMPLETIME_55CYCLES_5,
+						0.09555f,
+						0.0f,
+						0.4f );
+
+	float	anglesensor = 0.0f;
+
 	/* USER CODE END 2 */
 
 	/* Infinite loop */
@@ -158,6 +182,12 @@ int main(void)
 			uint16_t n = uart_recv(&uart1, buf, sizeof(buf));
 		}
 		DELAY_MS(1000);
+
+		angle_sensor_read_total_angle(&encorder, &total_angle);
+		angle_sensor_read_angle(&encorder, &angle);
+		angle_sensor_read_speed(&encorder, &speed);
+
+		angle = AngleSensor_GetAngle(&sensor1);
 	}
 	/* USER CODE END 3 */
 }
