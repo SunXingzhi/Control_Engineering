@@ -5,7 +5,7 @@
 #ifndef TWO_LINK_DRIVER_STEP_MOTOR_H
 #define TWO_LINK_DRIVER_STEP_MOTOR_H
 #include "device.h"
-#include "PID.h"
+// #include "PID.h"
 
 /* RTOS 条件编译头文件 */
 #ifdef USE_FREERTOS
@@ -172,9 +172,6 @@ typedef struct step_motor{
 	motor_driver_model_t	driver_model;
 	motor_base_t		motor_base_info;
 	step_motor_information_t step_motor_information;
-#if (USE_MOTOR_PID_CONTROL==1)
-	PID_t			motor_pid;
-#endif
 } step_motor_t;
 
 /* 工具函数 */
