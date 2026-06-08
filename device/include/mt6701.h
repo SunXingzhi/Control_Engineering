@@ -7,6 +7,7 @@
 #define __MT6701_H
 
 #include "stm32f1xx_hal.h"
+#include "public_rule.h"
 #include <stdint.h>
 #include "device.h"
 
