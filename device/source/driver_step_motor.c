@@ -7,24 +7,45 @@
 #include "auto_tune.h"
 #include "main.h"
 #include "device.h"
-#include "PID.h"
 #include "stm32f1xx_it.h"
+
+#if (USE_MOTOR_PID_CONTROL==1)
+#include "PID.h"
+#include "auto_tune.h"
+#endif
+
 
 // 灵活配置tim_clock_freq, 方便后续更改
 uint32_t tim_clock_freq	= 0;
+extern TIM_HandleTypeDef htim3;
 extern TIM_HandleTypeDef htim4;
+
+#if (USE_MOTOR_PID_CONTROL==1)
+	extern volatile uint8_t auto_tune_active;
+	extern volatile PID_AutoTune_t tuner;
+	extern volatile float g_wave_target;
+	extern volatile float g_wave_actual;
+	extern volatile uint8_t g_wave_ready;
+	extern mt6701_t* g_dev;
+#endif
+
 // 内部函数定义
 #if USE_MOTOR_PID_CONTROL==0
-static device_err_t ramp_step_motor_init(motor_ramp_t* ramp,
-								uint32_t target_freq,
-								uint32_t step_freq,
-								uint32_t hold_ms);
-static device_err_t ramp_step_motor_start(motor_ramp_t* ramp, step_motor_t* motor);
-device_err_t ramp_step_motor_tick(motor_ramp_t* ramp, step_motor_t* motor);
+	static device_err_t ramp_step_motor_init(motor_ramp_t* ramp,
+									uint32_t target_freq,
+									uint32_t step_freq,
+									uint32_t hold_ms);
+	static device_err_t ramp_step_motor_start(motor_ramp_t* ramp, step_motor_t* motor);
+	device_err_t ramp_step_motor_tick(motor_ramp_t* ramp, step_motor_t* motor);
 #endif
 
 void step_motor_pwm_off(step_motor_t* motor);
-static device_err_t step_motor_set_direction(step_motor_t* motor, motor_direction_t dir);
+device_err_t step_motor_set_direction(step_motor_t* motor, motor_direction_t dir);
+
+#if USE_MOTOR_PID_CONTROL==1
+// PID 限速器状态（文件级，方便 step_motor_stop/set_speed 重置）
+static float clamp_last_output = 0.0f;
+#endif
 
 // ===============================工具函数==============================
 /**
@@ -87,6 +108,7 @@ uint16_t motor_freq_to_speed(const uint16_t freq, const motor_step_model_t step_
 
 	switch (step_model){
 	case FULL_STEP:
+		multiple	= 1;
 		break;
 	case HALF_STEP:
 		multiple	= 2;
@@ -133,18 +155,19 @@ device_err_t step_motor_init(step_motor_t* motor)
 
 	// 如果使用闭环控制则无需设置斜坡加速, 而是采用PID+输出限幅的操作
 #if (USE_MOTOR_PID_CONTROL==1)
-	// TODO 初始化PID参数
+	// 初始化PID参数（可通过串口 X 命令在线调参）
+	// Kp: 比例增益，误差变化时立即响应
+	// Ki: 积分增益，消除稳态误差（编码器噪声导致的输出漂移）
+	// Kd: 微分增益，抑制超调
 	motor->motor_pid	= *PID_init(&motor->motor_pid,
 				PID_INCREMENTAL,
 				&(motor->step_motor_information.step_model),
-				0,
-				0,
-				0,
+				0.03f,		// Kp — 增大，加速响应，减少超调
+				0.005f,		// Ki — 减小，抑制积分累积导致的振荡
+				0.001f,		// Kd — 微量微分，阻尼振荡
 				MOTOR_PID_OUTPUT_MAX(motor->step_motor_information.step_model),
-				MOTOR_PID_OUTPUT_MIN
+				MOTOR_PID_OUTPUT_MIN(motor->step_motor_information.step_model)
 			);
-	// 注册实例, 不注册会导致PID失效.
-	tim_register_motor(&htim4, motor);
 
 #elif (USE_MOTOR_PID_CONTROL==0)
 	// 初始化斜坡参数
@@ -152,6 +175,9 @@ device_err_t step_motor_init(step_motor_t* motor)
 
 #endif
 
+	// 注册实例, 不注册会导致TIM采样失效.
+	tim_register_motor(&htim4, motor);
+	tim_register_motor(&htim3, motor);
 	return DRV_OK;
 }
 
@@ -271,7 +297,10 @@ device_err_t step_motor_stop(step_motor_t* motor)
 	motor->ramp.state        = RAMP_IDLE;
 	motor->ramp.freq_current = 0;
 	motor->ramp.freq_target  = 0;
-	motor->ramp.step_number  = 0;
+	// motor->ramp.step_number  = 0;
+#elif USE_MOTOR_PID_CONTROL==1
+	// 重置限速器状态
+	clamp_last_output = 0.0f;
 #endif
 
 	return DRV_OK;
@@ -323,9 +352,6 @@ device_err_t step_motor_set_speed(step_motor_t* motor, const float speed, const 
 	if (target_freq == 0) return DRV_ERR_PARAM;
 	// 如果频率过大, 设置为支持的电机最大频率
 	if (target_freq>MAX_PWM_FREQUENCY_HZ) target_freq	= MAX_PWM_FREQUENCY_HZ;
-#if DEBUG==1
-	printf("[DEBUG] MR:%d.\n", converted_speed);
-#endif
 
 #if USE_MOTOR_PID_CONTROL==0
 	// 如果不使用闭环控制, 则需要设置
@@ -339,11 +365,21 @@ device_err_t step_motor_set_speed(step_motor_t* motor, const float speed, const 
 	return ramp_step_motor_start(&motor->ramp, motor);
 #elif USE_MOTOR_PID_CONTROL==1
 	// 设置PID内容(pid的target是转速, 单位rpm)
-	__disable_irq();
-	motor->motor_pid.Target	= speed;
-	__enable_irq();
-	// 设置电机速度
-	step_motor_set_pulse_freq(motor, target_freq);
+	// 启动时：Output 从 DEFAULT_MOTOR_FREQUENCY_HZ (500Hz≈150rpm) 开始
+	//         增量式 PID 配合限速器逐步加速到目标
+	//         避免高频目标直接打到电机上导致失步
+	float start_rpm = motor_freq_to_speed(DEFAULT_MOTOR_FREQUENCY_HZ,
+	                                      motor->step_motor_information.step_model);
+	CRITICAL_ENTER();
+	motor->motor_pid.Target     = speed;
+	motor->motor_pid.Output     = start_rpm;
+	motor->motor_pid.Error      = 0;
+	motor->motor_pid.LastError  = 0;
+	clamp_last_output           = start_rpm;  // 必须在临界区内，防止 ISR 用旧值
+	CRITICAL_EXIT();
+	// 用默认频率初始化 PWM，确保电机可靠启动
+	step_motor_set_pulse_freq(motor, DEFAULT_MOTOR_FREQUENCY_HZ);
+	step_motor_start(motor);
 #endif
 	return  DRV_OK;
 }
@@ -431,7 +467,7 @@ device_err_t step_motor_set_pulse_freq(step_motor_t* motor, uint16_t pulse_freq_
  * @param  dir:   目标运动方向
  * @retval device_err_t
  */
-static device_err_t step_motor_set_direction(step_motor_t* motor, motor_direction_t dir)
+device_err_t step_motor_set_direction(step_motor_t* motor, motor_direction_t dir)
 {
 	if (motor==NULL) return DRV_ERR_NULL;
 	if (dir > STOP_DIR) return DRV_ERR_PARAM;
@@ -441,10 +477,10 @@ static device_err_t step_motor_set_direction(step_motor_t* motor, motor_directio
 	 * 速度 / 换向逻辑由上层 step_motor_set_speed() 负责 */
 	if (dir == POSITIVE_DIR) {
 		HAL_GPIO_WritePin(motor->motor_base_info.dir_gpio_port,
-		                  motor->motor_base_info.dir_gpio_pin, GPIO_PIN_SET);
+		                  motor->motor_base_info.dir_gpio_pin, GPIO_PIN_RESET);
 	} else {
 		HAL_GPIO_WritePin(motor->motor_base_info.dir_gpio_port,
-		                  motor->motor_base_info.dir_gpio_pin, GPIO_PIN_RESET);
+		                  motor->motor_base_info.dir_gpio_pin, GPIO_PIN_SET);
 	}
 
 	motor->step_motor_information.dir = dir;
@@ -491,7 +527,7 @@ inline void ramp_step_motor_set(motor_ramp_t* ramp,
 	ramp->freq_step		= MOTOR_STEP_LENGTH_FREQUENCY_HZ;
 	ramp->hold_target	= hold_ms!=0 ? (hold_ms/5):0;   // 5ms 一个 tick
 	ramp->hold_ticks	= 0;
-	ramp->step_number	= step_number;  // 步数限位用
+	// ramp->step_number	= step_number;  // 步数限位用
 }
 
 /**
@@ -629,4 +665,103 @@ device_err_t ramp_step_motor_tick(motor_ramp_t* ramp, step_motor_t* motor)
 }
 #endif
 
+/* ======================== PID 控制 ======================== */
 
+#if USE_MOTOR_PID_CONTROL==1
+
+/**
+ * @brief  限速 + 限幅
+ * @param  raw: PID 原始输出
+ * @retval 限速限幅后的输出
+ */
+float pid_output_clamp(float raw)
+{
+
+	float delta = raw - clamp_last_output;
+	if (delta >  MOTOR_ACCEL_LIMIT) delta =  MOTOR_ACCEL_LIMIT;
+	if (delta < -MOTOR_ACCEL_LIMIT) delta = -MOTOR_ACCEL_LIMIT;
+	float output = clamp_last_output + delta;
+	clamp_last_output = output;
+
+	if (output >  MOTOR_MAX_RPM) output =  MOTOR_MAX_RPM;
+	if (output < -MOTOR_MAX_RPM) output = -MOTOR_MAX_RPM;
+
+	return output;
+}
+
+/**
+ * @brief  将 PID 输出写入电机硬件（方向 + 频率）
+ * @note   不经过 step_motor_set_speed，避免覆盖 PID Target
+ */
+void pid_apply_output(step_motor_t* motor, float output)
+{
+	if (output > 0.0f){
+		step_motor_set_direction(motor, POSITIVE_DIR);
+		uint16_t freq = motor_speed_to_freq(output,
+			motor->step_motor_information.step_model);
+		step_motor_set_pulse_freq(motor, freq);
+	} else if (output < 0.0f){
+		step_motor_set_direction(motor, NEGATIVE_DIR);
+		uint16_t freq = motor_speed_to_freq(-output,
+			motor->step_motor_information.step_model);
+		step_motor_set_pulse_freq(motor, freq);
+	}
+}
+
+/**
+ * @brief  更新波形共享数据（主循环负责打印）
+ */
+static void wave_data_update(float target, float actual)
+{
+	static uint8_t tick = 0;
+	if (++tick >= 5){
+		tick = 0;
+		g_wave_target = target;
+		g_wave_actual = actual;
+		g_wave_ready = 1;
+	}
+}
+
+// ---- PID 调试共享变量（ISR 写，主循环读）----
+volatile float g_pid_debug_output = 0;    // PID 计算输出
+volatile float g_pid_debug_actual = 0;    // 编码器实际速度
+volatile float g_pid_debug_error = 0;     // 当前误差
+volatile uint16_t g_pid_debug_freq = 0;   // 实际写入的脉冲频率
+
+/**
+ * @brief  PID 控制 / 自动调参主逻辑（TIM3 中断，每 PID_DIVIDER 次(Default:2)采样执行一次）
+ */
+void pid_control_tick(step_motor_t* motor)
+{
+	static uint8_t pid_tick = 0;
+	if (++pid_tick < PID_DIVIDER) return;
+	pid_tick = 0;
+
+	if (motor == NULL || g_dev == NULL) return;
+
+	float actual = g_dev->sensor.speed;
+
+	// ---- 自动调参模式 ----
+	if (auto_tune_active && !PID_AutoTune_IsDone((PID_AutoTune_t*)&tuner)){
+		float output = PID_AutoTune_Calc((PID_AutoTune_t*)&tuner, actual, 0.002f);
+		motor_direction_t dir = (output >= 0) ? POSITIVE_DIR : NEGATIVE_DIR;
+		step_motor_set_speed(motor, self_fabs(output), dir);
+		return;
+	}
+
+	// ---- 正常 PID 模式 ----
+	float raw = PID_calc(&motor->motor_pid, actual);
+
+	// 限速 + 限幅（20rpm/周期），防止 Output 飙升太快导致电机失步
+	float output = pid_output_clamp(raw);
+
+	// 调试：记录 PID 状态
+	g_pid_debug_output = output;
+	g_pid_debug_actual = actual;
+	g_pid_debug_error  = motor->motor_pid.Error;
+	g_pid_debug_freq   = motor->step_motor_information.current_frequency;
+
+	pid_apply_output(motor, output);
+
+}
+#endif

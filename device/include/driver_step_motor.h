@@ -61,7 +61,7 @@
 		uint32_t freq_step;
 		uint32_t hold_ticks;
 		uint32_t hold_target;   // 保持的总 tick 数
-		uint16_t step_number;	// 指定的步数前进
+		// uint16_t step_number;	// 指定的步数前进
 	} motor_ramp_t;
 #else
 	// FREERTOS直接使用软件定时器
@@ -158,9 +158,20 @@ typedef struct step_motor{
 
 // 电机速度控制算法参数配置
 #define CONTROL_CYCLE_MS			2u	// 倒立摆推荐控制周期)
-// 电机PID输出限幅 单位: m/s
-#define MOTOR_PID_OUTPUT_MAX(motor_step_model)	motor_freq_to_speed(MOTOR_STEP_LENGTH_FREQUENCY_HZ, motor_step_model)
-#define MOTOR_PID_OUTPUT_MIN			(float)0
+// 电机 PID 的可靠工作频率上限（实测数据：带载时 1448Hz 以上失步）
+// 设置为 1400Hz 留一定安全余量，对应 ~420rpm@FULL_STEP
+// 如果更换电机/负载/电压，需要重新标定这个值
+#define PID_SAFE_MAX_FREQUENCY_HZ	1400
+
+// 电机PID输出限幅 单位: rpm（对称，支持正反两个方向）
+// 使用 PID_SAFE_MAX_FREQUENCY_HZ 而非 MAX_PWM_FREQUENCY_HZ
+// PID 输出超过这个值→频率过高→电机失步→encoder=0→误差巨大→输出飙升的恶性循环
+#define MOTOR_PID_OUTPUT_MAX(motor_step_model)	motor_freq_to_speed(PID_SAFE_MAX_FREQUENCY_HZ, motor_step_model)
+#define MOTOR_PID_OUTPUT_MIN(motor_step_model)	(-(float)motor_freq_to_speed(PID_SAFE_MAX_FREQUENCY_HZ, motor_step_model))
+
+#define MOTOR_ACCEL_LIMIT   20.0f   // rpm/周期，防止启动失步
+#define MOTOR_MAX_RPM       960.0f  // 最大输出转速
+#define PID_DIVIDER         2       // PID 周期 = 采样周期 × 2
 
 static const float PWM_PULSE_TIME_MIN = 0.00001f; // A4988驱动要求STEP脉冲最小要大于1e-6s
 
@@ -182,6 +193,7 @@ device_err_t step_motor_set_speed(step_motor_t* motor,
 				motor_direction_t dir);
 device_err_t step_motor_move_angle(step_motor_t* motor, motor_direction_t dir, float angle);
 device_err_t step_motor_set_pulse_freq(step_motor_t* motor, uint16_t pulse_freq_hz);
+device_err_t step_motor_set_direction(step_motor_t* motor, motor_direction_t dir);
 void         step_motor_pwm_off(step_motor_t* motor);
 
 #if (USE_MOTOR_PID_CONTROL==0)
@@ -191,6 +203,10 @@ void         step_motor_pwm_off(step_motor_t* motor);
 			uint16_t step_number,
 			uint32_t hold_ms, ramp_state_t state);
 	device_err_t ramp_step_motor_tick(motor_ramp_t* ramp, step_motor_t* motor);
+#elif (USE_MOTOR_PID_CONTROL==1)
+float pid_output_clamp(float raw);
+void pid_apply_output(step_motor_t* motor, float output);
+void pid_control_tick(step_motor_t* motor);
 #endif
 
 #endif //TWO_LINK_DRIVER_STEP_MOTOR_H

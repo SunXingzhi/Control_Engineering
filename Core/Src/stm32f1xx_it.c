@@ -27,6 +27,7 @@
 #include "PID.h"
 #include "mt6701.h"
 #include "auto_tune.h"
+#include "device.h"
 #include "tim.h"
 /* USER CODE END Includes */
 
@@ -68,7 +69,7 @@ extern TIM_HandleTypeDef htim4;
 extern UART_HandleTypeDef huart1;
 /* USER CODE BEGIN EV */
 extern PID_AutoTune_t tuner;
-extern uint8_t auto_tune_active;
+
 /* USER CODE END EV */
 
 /******************************************************************************/
@@ -279,11 +280,13 @@ void USART1_IRQHandler(void)
 }
 
 /* USER CODE BEGIN 1 */
-extern mt6701_t* encoder;
-// 创建TIM回调对应功能实例
-static tim_callback_entry_t callback_table[8] = {0}; // 最多8个TIM实例, TIM1-TIM8
+extern mt6701_t encoder;
+static tim_callback_entry_t callback_table[8] = {0};
 
 extern mt6701_t* g_dev;
+
+
+/* ======================== 注册 / 查找 ======================== */
 
 void tim_register_motor(TIM_HandleTypeDef* htim, step_motor_t* motor)
 {
@@ -293,117 +296,66 @@ void tim_register_motor(TIM_HandleTypeDef* htim, step_motor_t* motor)
 	}
 }
 
-step_motor_t* find_step_motor_from_tim_table(TIM_HandleTypeDef* htim)
+static step_motor_t* find_motor_by_tim(TIM_HandleTypeDef* htim)
 {
-	// 获取对应索引
-	const uint8_t index = TIM_TO_TABLE_INDEX(htim);
+	uint8_t index = TIM_TO_TABLE_INDEX(htim);
 	return callback_table[index].motor;
 }
 
+/* ======================== TIM4: 步数限位 ======================== */
+
 /**
- * @brief TIM中断回调函数. 目前步进电机用到了TIM3 CH1作为PWM输出, 同时编码器使用TIM4普通计时器模式来计算编码器捕获到的角速度.
- * @param htim
+ * @brief  TIM4 更新中断处理（步数限位计数）
+ * @note   仅在 move_angle 设置 step_remaining 后才计数
+ */
+static void tim4_step_counter_isr(TIM_HandleTypeDef* htim)
+{
+	step_motor_t* motor = find_motor_by_tim(htim);
+	if (motor == NULL) return;
+
+	step_motor_information_t* info = &motor->step_motor_information;
+	if (info->step_remaining > 0){
+		info->step_remaining--;
+		if (info->step_remaining == 0){
+			__HAL_TIM_DISABLE_IT(htim, TIM_IT_UPDATE);
+			step_motor_pwm_off(motor);
+		}
+	}
+}
+
+/* ======================== HAL 回调入口 ======================== */
+
+/**
+ * @brief  TIM 更新中断回调（由 HAL_TIM_IRQHandler 调用）
+ * @param  htim: 触发中断的定时器句柄
  */
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* htim)
 {
-
-	angle_sensor_t* s = NULL;
-	step_motor_t* motor = find_step_motor_from_tim_table(htim);
-	// 电机部分: TIM4 更新中断 → 步数限位计数（开环/闭环通用）
+	// TIM4 → 步数限位
 	if (htim->Instance == TIM4){
-		if (motor != NULL){
-			step_motor_information_t* info = &motor->step_motor_information;
-
-			if (info->step_remaining > 0){
-				info->step_remaining--;
-			}
-
-			if (info->step_remaining == 0){
-				// 目标步数到达：关中断 + 关 PWM
-				__HAL_TIM_DISABLE_IT(htim, TIM_IT_UPDATE);
-				step_motor_pwm_off(motor);
-			}
-		}
+		tim4_step_counter_isr(htim);
 	}
-
-	// 编码器部分, 周期1ms, (二级倒立摆可能需要改成2ms)
+	// TIM3 → 编码器采样(周期1ms) + PID控制(周期2ms)
 	else if (htim->Instance == TIM3){
-		if (g_dev == NULL){
-			return;
-		}
-		if (htim->Instance == g_dev->sensor.htim->Instance){
-			s = &g_dev->sensor;
-
-			if (s->first_sample){
-				s->first_sample = 0;
-				s->angle_last = s->angle;
-			}
-
-			float diff = cycle_diff(s->angle - s->angle_last, MT6701_ANGLE_MAX);
-			__disable_irq(); // 禁用中断
-			s->angle_last = s->angle;
-			s->speed = diff * speed_calc_freq;
-			s->speed_raw = (int32_t)(s->speed * 100.0f * (180.0f / 3.1415926f));
-			__enable_irq(); // 使能中断
-		}
-
+		encoder_update_speed();
+		step_motor_t* motor = find_motor_by_tim(htim);
+		if (motor == NULL) return;
 #if USE_MOTOR_PID_CONTROL==1
-		// ---- PID 控制 / 自动调参（每 2 次采样执行一次，即 2ms 控制周期） ----
-		{
-			static uint8_t pid_tick = 0;
-			if (++pid_tick >= 2){
-				pid_tick = 0;
-
-				if (motor != NULL && g_dev != NULL){
-					float actual = g_dev->sensor.speed;
-					float output = 0.0f;
-
-					// ---- 自动调参模式 ----
-					if (auto_tune_active && !PID_AutoTune_IsDone(&tuner)){
-						// 继电器调参：输出直接给电机，不经过 PID
-						output = PID_AutoTune_Calc(&tuner, actual, 0.002f);
-						motor_direction_t tune_dir = (output >= 0) ? POSITIVE_DIR : NEGATIVE_DIR;
-						step_motor_set_speed(motor, self_fabs(output), tune_dir);
-						return;  // 调参模式不走下面的 PID 逻辑
-					}
-
-					// ---- 正常 PID 模式 ----
-					output = PID_calc(&motor->motor_pid, actual);
-
-					// 输出限速（防止步进电机启动失步）
-					// max_delta = 20rpm/周期，0→960rpm 约 96ms
-					#define MOTOR_ACCEL_LIMIT  20.0f
-					static float last_output = 0.0f;
-					float delta = output - last_output;
-					if (delta >  MOTOR_ACCEL_LIMIT) delta =  MOTOR_ACCEL_LIMIT;
-					if (delta < -MOTOR_ACCEL_LIMIT) delta = -MOTOR_ACCEL_LIMIT;
-					output = last_output + delta;
-					last_output = output;
-
-					// 输出限幅
-					#define MOTOR_MAX_RPM  960.0f
-					if (output >  MOTOR_MAX_RPM) output =  MOTOR_MAX_RPM;
-					if (output < -MOTOR_MAX_RPM) output = -MOTOR_MAX_RPM;
-
-					// 方向 + 电机输出
-					motor_direction_t dir;
-					float speed_cmd;
-					if (output > 0.0f){
-						dir = POSITIVE_DIR;
-						speed_cmd = output;
-					} else if (output < 0.0f){
-						dir = NEGATIVE_DIR;
-						speed_cmd = -output;
-					} else {
-						dir = STOP_DIR;
-						speed_cmd = 0;
-					}
-					step_motor_set_speed(motor, speed_cmd, dir);
-				}
-			}
-		}
+		pid_control_tick(find_motor_by_tim(htim));
 #endif
-
+		// 波形输出：打印目标值和实际值
+		extern volatile uint8_t g_wave_ready;
+		extern volatile float g_wave_target;
+		extern volatile float g_wave_actual;
+		extern volatile uint8_t auto_tune_active;
+		static volatile uint8_t tick = 0;
+		if (++tick >= 5){
+			tick = 0;
+			extern PID_AutoTune_t tuner;
+			// g_wave_target = auto_tune_active ? tuner.setpoint : motor->motor_pid.Target;
+			g_wave_actual = g_dev->sensor.speed;
+			g_wave_ready = 1;
+		}
 	}
 }
 

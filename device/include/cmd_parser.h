@@ -35,14 +35,18 @@ typedef enum CMD_ID {
 	CMD_STEP_MODEL,		// M:<mode>
 	CMD_AUTOTUNE_START,	// T
 	CMD_AUTOTUNE_RESULT,	// R
+	CMD_PID_SETTING,	// X
 	CMD_HELP,		// H
 } cmd_id_t;
 
 /** 解析后的命令结构 */
 typedef struct CMD {
 	cmd_id_t	id;
-	float		param1;		// rpm 或 angle
-	uint8_t		param2;		// direction 或 step_model
+	float		param1;		// rpm 或 angle 或 target
+	uint8_t		param2;		// direction 或 step_model 或
+	float		param3;		// Kp
+	float		param4;		// Ki
+	float		param5;		// Kd
 } cmd_t;
 
 /**

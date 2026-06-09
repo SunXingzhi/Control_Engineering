@@ -39,6 +39,12 @@ PID_t* PID_init(PID_t* pid, PID_algo_t algo, void* args,
 	pid->OutputMax = output_max;
 	pid->OutputMin = output_min;
 
+	// 初始化运行时状态（防止首次 calc 时使用未定义值）
+	pid->Target   = 0;
+	pid->Output   = 0;
+	pid->Error    = 0;
+	pid->LastError = 0;
+
 
 	return pid;
 }

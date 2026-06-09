@@ -24,6 +24,7 @@
 #include "tim.h"
 #include "usart.h"
 #include "gpio.h"
+#include "stm32f1xx_it.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -31,6 +32,7 @@
 #include "../../device/include/test_step_motor.h"
 #include "../../device/include/test_cmd_motor.h"
 #include "../../device/include/auto_tune.h"
+#include "../../device/include/mt6701.h"
 #include "../../device/include/uart.h"
 /* USER CODE END Includes */
 
@@ -93,9 +95,24 @@ step_motor_t motor = {
 	}
 };
 
-// 自动调参实例
-PID_AutoTune_t tuner;
-uint8_t auto_tune_active = 0;  // 1=调参模式, 0=正常PID模式
+// MT6701 磁编码器实例
+mt6701_t encoder = {
+	.sensor = {
+		.hspi = &hspi1,
+		.cs_gpiox = MT6701_CSN_GPIO_Port,
+		.cs_gpio_pin = MT6701_CSN_Pin,
+		.htim = &htim3,
+	},
+};
+
+// 自动调参实例（ISR 读写，需通过临界区保护多字节访问）
+volatile PID_AutoTune_t tuner;
+volatile uint8_t auto_tune_active = 0;  // 1=调参模式, 0=正常PID模式
+
+// 波形数据共享变量（ISR 写，主循环读）
+volatile float g_wave_target = 0;
+volatile float g_wave_actual = 0;
+volatile uint8_t g_wave_ready = 0;
 
 /* USER CODE END 0 */
 
@@ -140,16 +157,26 @@ int main(void)
 		Error_Handler();
 	}
 
+	// 初始化 MT6701 磁编码器
+	if (angle_sensor_init(&encoder) != DRV_OK){
+		Error_Handler();
+	}
+
+	// 注册电机到 TIM 回调表（TIM4 中断能找到 motor 实例）
+	// tim_register_motor(&htim4, &motor);
+
 	// 初始化自动调参（默认关闭，通过串口命令启动）
-	PID_AutoTune_Init(&tuner,
+	PID_AutoTune_Init((PID_AutoTune_t*)&tuner,
 				PRESET_AUTOTUNE_AMPLITUDE,
 				PRESET_AUTOTUNE_HYSTERESIS,
 				PRESET_AUTOTUNE_SETPOINT,
 				PRESET_AUTOTUNE_CYCLES);
 
-	// 初始化串口命令测试（替代阻塞式单元测试）
+	// 初始化串口命令测试
 	test_cmd_motor_init(&motor, &uart1);
-
+	// 测试普通电机
+	// test_step_motor_run_all(&motor);
+	step_motor_set_speed(&motor, 500, POSITIVE_DIR);
 	/* USER CODE END 2 */
 
 	/* Infinite loop */
@@ -159,6 +186,27 @@ int main(void)
 
 		/* USER CODE BEGIN 3 */
 		test_cmd_motor_loop();
+
+		// 波形输出（主循环打印，不阻塞 ISR）
+		if (g_wave_ready){
+			g_wave_ready = 0;
+#if (USE_MOTOR_PID_CONTROL)==1
+			// 调试：打印 PID 输出、编码器速度、误差、实际频率
+			extern volatile float g_pid_debug_output;
+			extern volatile float g_pid_debug_actual;
+			extern volatile float g_pid_debug_error;
+			extern volatile uint16_t g_pid_debug_freq;
+			printf("out=%.1f act=%.1f err=%.1f freq=%u\r\n",
+				(double)g_pid_debug_output,
+				(double)g_pid_debug_actual,
+				(double)g_pid_debug_error,
+				g_pid_debug_freq);
+#else
+
+
+#endif
+
+		}
 	}
 	/* USER CODE END 3 */
 }
@@ -209,6 +257,7 @@ void SystemClock_Config(void)
 /* USER CODE BEGIN 4 */
 
 
+
 /* USER CODE END 4 */
 
 /**
@@ -219,7 +268,7 @@ void Error_Handler(void)
 {
 	/* USER CODE BEGIN Error_Handler_Debug */
 	/* User can add his own implementation to report the HAL error return state */
-	__disable_irq();
+	CRITICAL_ENTER();
 	while (1){
 	}
 	/* USER CODE END Error_Handler_Debug */

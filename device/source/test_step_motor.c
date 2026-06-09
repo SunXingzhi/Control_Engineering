@@ -144,17 +144,17 @@ void test_step_motor_step_models(step_motor_t* motor)
 // ──────────────────────────────────────────────
 void test_step_motor_run_all(step_motor_t* motor)
 {
-	// /* 测试1: 匀速运行 */
-	// test_step_motor_constant_speed(motor);
-	//
-	// /* 测试2: 指定角度 */
-	// test_step_motor_move_angle(motor);
-	//
-	// /* 测试3: 方向更改 */
-	// test_step_motor_direction(motor);
-	//
-	// /* 测试4: 周期性换向 */
-	// test_step_motor_periodic_reverse(motor);
+	/* 测试1: 匀速运行 */
+	test_step_motor_constant_speed(motor);
+
+	/* 测试2: 指定角度 */
+	test_step_motor_move_angle(motor);
+
+	/* 测试3: 方向更改 */
+	test_step_motor_direction(motor);
+
+	/* 测试4: 周期性换向 */
+	test_step_motor_periodic_reverse(motor);
 
 	/* 测试5: 不同步长 */
 	test_step_motor_step_models(motor);

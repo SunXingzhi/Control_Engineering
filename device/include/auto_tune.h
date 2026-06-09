@@ -62,10 +62,12 @@ typedef struct PID_AUTOTUNE {
 } PID_AutoTune_t;
 
 // 定义配置参数(有关单位: RPM)
-#define PRESET_AUTOTUNE_AMPLITUDE		(float)150
-#define PRESET_AUTOTUNE_HYSTERESIS		(float)8
-#define PRESET_AUTOTUNE_SETPOINT		(float)500
-#define PRESET_AUTOTUNE_CYCLES			8
+// relay 幅值必须 > setpoint，否则电机永远到不了切换点，继电器不振荡
+// hysteresis 必须 > 编码器噪声幅度，否则继电器会被噪声驱动高频抖动
+#define PRESET_AUTOTUNE_AMPLITUDE		(float)300	// 继电器输出 ±300rpm
+#define PRESET_AUTOTUNE_HYSTERESIS		(float)50	// 滞环宽度（需 > 编码器噪声 ±20rpm）
+#define PRESET_AUTOTUNE_SETPOINT		(float)200	// 振荡中心 200rpm
+#define PRESET_AUTOTUNE_CYCLES			8		// 测量周期数
 #define PRESET_AUTOTUNE_MAX_OUTPUT		(float)
 
 // ======================== 公共 API ========================
