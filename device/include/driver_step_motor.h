@@ -165,13 +165,17 @@ typedef struct step_motor{
 
 // 电机PID输出限幅 单位: rpm（对称，支持正反两个方向）
 // 使用 PID_SAFE_MAX_FREQUENCY_HZ 而非 MAX_PWM_FREQUENCY_HZ
-// PID 输出超过这个值→频率过高→电机失步→encoder=0→误差巨大→输出飙升的恶性循环
 #define MOTOR_PID_OUTPUT_MAX(motor_step_model)	motor_freq_to_speed(PID_SAFE_MAX_FREQUENCY_HZ, motor_step_model)
 #define MOTOR_PID_OUTPUT_MIN(motor_step_model)	(-(float)motor_freq_to_speed(PID_SAFE_MAX_FREQUENCY_HZ, motor_step_model))
 
 #define MOTOR_ACCEL_LIMIT   20.0f   // rpm/周期，防止启动失步
 #define MOTOR_MAX_RPM       960.0f  // 最大输出转速
 #define PID_DIVIDER         2       // PID 周期 = 采样周期 × 2
+
+// 失步检测与软重启参数
+#define STALL_SPEED_THRESHOLD   30.0f   // rpm，低于此速度视为"可能失步"
+#define STALL_DETECT_CYCLES     50      // 连续多少个 PID 周期确认失步（50×2ms=100ms）
+#define STALL_RESTART_COOLDOWN  25      // 软重启后冷却周期数（25×2ms=50ms），让电机在低频重新同步
 
 static const float PWM_PULSE_TIME_MIN = 0.00001f; // A4988驱动要求STEP脉冲最小要大于1e-6s
 

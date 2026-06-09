@@ -361,6 +361,8 @@ static void execute_cmd(const cmd_t* cmd)
 		s_motor->motor_pid.Ki = ki;
 		s_motor->motor_pid.Kd = kd;
 		auto_tune_active = 0;
+		extern volatile float g_wave_target;
+		g_wave_target	= target;
 		CRITICAL_EXIT();
 
 		// 启动电机

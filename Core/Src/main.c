@@ -176,7 +176,7 @@ int main(void)
 	test_cmd_motor_init(&motor, &uart1);
 	// 测试普通电机
 	// test_step_motor_run_all(&motor);
-	step_motor_set_speed(&motor, 500, POSITIVE_DIR);
+	// step_motor_set_speed(&motor, 500, POSITIVE_DIR);
 	/* USER CODE END 2 */
 
 	/* Infinite loop */
@@ -196,11 +196,9 @@ int main(void)
 			extern volatile float g_pid_debug_actual;
 			extern volatile float g_pid_debug_error;
 			extern volatile uint16_t g_pid_debug_freq;
-			printf("out=%.1f act=%.1f err=%.1f freq=%u\r\n",
-				(double)g_pid_debug_output,
-				(double)g_pid_debug_actual,
-				(double)g_pid_debug_error,
-				g_pid_debug_freq);
+			printf("%.1f,%.1f\r\n",
+				g_wave_target,
+				(double)g_pid_debug_actual);
 #else
 
 
