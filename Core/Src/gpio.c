@@ -62,11 +62,17 @@ void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(MT6701_CSN_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : MOTOR_LIMIT_CLOSE_PIN_Pin MOTOR_LIMIT_REMOTE_PIN_Pin */
-  GPIO_InitStruct.Pin = MOTOR_LIMIT_CLOSE_PIN_Pin|MOTOR_LIMIT_REMOTE_PIN_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_PULLUP;
-  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+  /*Configure GPIO pin : MOTOR_LIMIT_CLOSE_Pin */
+  GPIO_InitStruct.Pin = MOTOR_LIMIT_CLOSE_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING_FALLING;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(MOTOR_LIMIT_CLOSE_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : MOTOR_LIMIT_REMOTE_Pin */
+  GPIO_InitStruct.Pin = MOTOR_LIMIT_REMOTE_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(MOTOR_LIMIT_REMOTE_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pin : MOTOR_DIR_PIN_Pin */
   GPIO_InitStruct.Pin = MOTOR_DIR_PIN_Pin;
@@ -81,6 +87,10 @@ void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+  /* EXTI interrupt init*/
+  HAL_NVIC_SetPriority(EXTI15_10_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
 
 }
 

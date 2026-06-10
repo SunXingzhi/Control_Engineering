@@ -67,8 +67,8 @@ void cmd_send_help(uart_base_t* uart)
 	s_uart = uart;
 
 	SEND_STR("===================== Motor Control Commands ==================\r\n");
-	SEND_STR("| S:<rpm>,<dir>    		Set speed (dir: 1=FWD, 2=REV)	|\r\n");
-	SEND_STR("| A:<angle>,<dir>  		Move angle (degree)		|\r\n");
+	SEND_STR("| S:<rpm>          		Set speed (negative=REV)	|\r\n");
+	SEND_STR("| A:<angle>        		Move angle (negative=REV)	|\r\n");
 	SEND_STR("| P                		Stop motor			|\r\n");
 	SEND_STR("| Q                		Query status			|\r\n");
 	SEND_STR("| M:<mode>         		Set step mode (1/2/4/8/16)	|\r\n");
@@ -106,38 +106,27 @@ static cmd_t parse_cmd(const uint8_t* data, uint16_t len)
 	char type = (char)data[0];
 
 	switch (type) {
-	case 'S':  // S:<rpm>,<dir>
+	case 'S':  // S:<rpm>  负数表示反向
 	case 's':
 		cmd.id = CMD_SPEED;
 		if (len > 2 && data[1] == ':') {
-			// 查找逗号分隔 rpm 和 dir
-			const uint8_t* comma = memchr(data + 2, ',', len - 2);
-			if (comma != NULL) {
-				char rpm_str[16] = {0};
-				uint16_t rpm_len = comma - data - 2;
-				if (rpm_len < sizeof(rpm_str)) {
-					memcpy(rpm_str, data + 2, rpm_len);
-					cmd.param1 = strtof(rpm_str, NULL);  // rpm
-				}
-				cmd.param2 = (uint8_t)atoi((const char*)(comma + 1));  // dir
-			}
+			char rpm_str[16] = {0};
+			uint16_t rpm_len = len - 2;
+			if (rpm_len >= sizeof(rpm_str)) rpm_len = sizeof(rpm_str) - 1;
+			memcpy(rpm_str, data + 2, rpm_len);
+			cmd.param1 = strtof(rpm_str, NULL);  // rpm（可正可负）
 		}
 		break;
 
-	case 'A':  // A:<angle>,<dir>
+	case 'A':  // A:<angle>  负数表示反向
 	case 'a':
 		cmd.id = CMD_ANGLE;
 		if (len > 2 && data[1] == ':') {
-			const uint8_t* comma = memchr(data + 2, ',', len - 2);
-			if (comma != NULL) {
-				char angle_str[16] = {0};
-				uint16_t angle_len = comma - data - 2;
-				if (angle_len < sizeof(angle_str)) {
-					memcpy(angle_str, data + 2, angle_len);
-					cmd.param1 = strtof(angle_str, NULL);  // angle
-				}
-				cmd.param2 = (uint8_t)atoi((const char*)(comma + 1));  // dir
-			}
+			char angle_str[16] = {0};
+			uint16_t angle_len = len - 2;
+			if (angle_len >= sizeof(angle_str)) angle_len = sizeof(angle_str) - 1;
+			memcpy(angle_str, data + 2, angle_len);
+			cmd.param1 = strtof(angle_str, NULL);  // angle（可正可负）
 		}
 		break;
 
@@ -217,15 +206,16 @@ static void execute_cmd(const cmd_t* cmd)
 	if (cmd == NULL) return;
 
 	switch (cmd->id) {
-	// 设置电机速度命令
+	// 设置电机速度命令（负数=反向）
 	case CMD_SPEED: {
 		float rpm = cmd->param1;
-		motor_direction_t dir = (cmd->param2 == 2) ? NEGATIVE_DIR : POSITIVE_DIR;
 
-		if (rpm <= 0) {
-			send_err("invalid rpm");
+		if (rpm == 0) {
+			send_err("invalid rpm (nonzero)");
 			return;
 		}
+
+		motor_direction_t dir = (rpm > 0) ? POSITIVE_DIR : NEGATIVE_DIR;
 
 		CRITICAL_ENTER();
 		auto_tune_active = 0;  // 退出自动调参模式
@@ -234,23 +224,24 @@ static void execute_cmd(const cmd_t* cmd)
 		device_err_t ret = step_motor_set_speed(s_motor, rpm, dir);
 		if (ret == DRV_OK) {
 			send_ok();
-			// 设置目标速度
 			extern volatile float g_wave_target;
-			g_wave_target	= rpm;
+			g_wave_target = rpm;
 		} else {
 			send_err("set_speed failed");
 		}
 		break;
 	}
-	// 指定电机运动角度命令
+	// 指定电机运动角度命令（负数=反向）
 	case CMD_ANGLE: {
 		float angle = cmd->param1;
-		motor_direction_t dir = (cmd->param2 == 2) ? NEGATIVE_DIR : POSITIVE_DIR;
 
-		if (angle <= 0) {
-			send_err("invalid angle");
+		if (angle == 0) {
+			send_err("invalid angle (nonzero)");
 			return;
 		}
+
+		motor_direction_t dir = (angle > 0) ? POSITIVE_DIR : NEGATIVE_DIR;
+		if (angle < 0) angle = -angle;
 
 		device_err_t ret = step_motor_move_angle(s_motor, dir, angle);
 		if (ret == DRV_OK) {

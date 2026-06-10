@@ -279,6 +279,21 @@ void USART1_IRQHandler(void)
   /* USER CODE END USART1_IRQn 1 */
 }
 
+/**
+  * @brief This function handles EXTI line[15:10] interrupts.
+  */
+void EXTI15_10_IRQHandler(void)
+{
+  /* USER CODE BEGIN EXTI15_10_IRQn 0 */
+
+  /* USER CODE END EXTI15_10_IRQn 0 */
+  HAL_GPIO_EXTI_IRQHandler(MOTOR_LIMIT_CLOSE_Pin);
+  HAL_GPIO_EXTI_IRQHandler(MOTOR_LIMIT_REMOTE_Pin);
+  /* USER CODE BEGIN EXTI15_10_IRQn 1 */
+
+  /* USER CODE END EXTI15_10_IRQn 1 */
+}
+
 /* USER CODE BEGIN 1 */
 extern mt6701_t encoder;
 static tim_callback_entry_t callback_table[8] = {0};
@@ -340,6 +355,9 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* htim)
 		encoder_update_speed();
 		step_motor_t* motor = find_motor_by_tim(htim);
 		if (motor == NULL) return;
+		// 更新电机当前频率
+		motor->step_motor_information.current_frequency	= motor_speed_to_freq(g_dev->sensor.speed,
+											motor->step_motor_information.step_model);
 #if USE_MOTOR_PID_CONTROL==1
 		pid_control_tick(find_motor_by_tim(htim));
 #endif

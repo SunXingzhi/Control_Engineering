@@ -89,7 +89,7 @@ uint16_t motor_speed_to_freq(float motor_speed_rpm, motor_step_model_t step_mode
  * @param  pulse_freq_hz: 此时的脉冲频率
  * @retval 返回对应ARR值
  */
-inline uint16_t motor_freq_to_arr(uint16_t pulse_freq_hz)
+uint16_t motor_freq_to_arr(uint16_t pulse_freq_hz)
 {
 	if (pulse_freq_hz==0 || tim_clock_freq==0) return 1;
 	return (tim_clock_freq / (htim4.Init.Prescaler + 1) /
@@ -132,7 +132,6 @@ uint16_t motor_freq_to_speed(const uint16_t freq, const motor_step_model_t step_
 }
 // =================================================================
 
-
 /**
  * @brief  初始化步进电机(用到什么内容可以改进电机对象成员变量)
  * @param  motor: 步进电机结构体指针，必须先填充 motor_base_info
@@ -155,15 +154,6 @@ device_err_t step_motor_init(step_motor_t* motor)
 
 	// 如果使用闭环控制则无需设置斜坡加速, 而是采用PID+输出限幅的操作
 #if (USE_MOTOR_PID_CONTROL==1)
-	// 初始化PID参数（可通过串口 X 命令在线调参）
-	// Kp: 比例增益，误差变化时立即响应
-	// Ki: 积分增益，消除稳态误差（编码器噪声导致的输出漂移）
-	// Kd: 微分增益，抑制超调
-	// 倒立摆速度环 PID 参数
-	// 要求: 快速跟踪、小超调、无稳态误差
-	// Kp 大: 快速响应误差
-	// Ki 适中: 消除稳态误差但不过度累积
-	// Kd 小: 抑制超调，但编码器噪声大会放大抖动
 	motor->motor_pid	= *PID_init(&motor->motor_pid,
 				PID_INCREMENTAL,
 				&(motor->step_motor_information.step_model),
@@ -369,19 +359,25 @@ device_err_t step_motor_set_speed(step_motor_t* motor, const float speed, const 
 	// 启动斜坡（start 内部根据 freq_current/target 自动选 ACCEL/DECEL）
 	return ramp_step_motor_start(&motor->ramp, motor);
 #elif USE_MOTOR_PID_CONTROL==1
-	// 启动频率：用 START_UP_PWM_FREQUENCY_HZ (1062Hz≈319rpm)
-	// 电机在这个频率下有足够扭矩，不会出现"转不动"的问题
-	// 增量式 PID 从 319rpm 开始，配合限速器逐步调整到目标
-	float start_rpm = motor_freq_to_speed(START_UP_PWM_FREQUENCY_HZ,
-	                                      motor->step_motor_information.step_model);
+	// 增量式 PID 从当前频率 + 最小启动频率开始
+	// 三者（Output / clamp_last_output / 硬件频率）必须一致，否则 PID 第一周期 delta 计算出错
 	CRITICAL_ENTER();
-	// 完整重置增量式 PID 状态（含 PrevError），防止残留的微分项导致首次计算出现尖刺
 	motor->motor_pid.interface->reset(&motor->motor_pid);
-	motor->motor_pid.Target     = speed;
+	motor->motor_pid.Target = speed;
+
+	// 同方向切换：cur_freq 保留，平滑过渡（避免断崖）
+	// 反向切换：step_motor_stop 已将 cur_freq 清零，从 MIN_START_FREQ 重新起步
+	uint16_t cur_freq = motor->step_motor_information.current_frequency;
+	uint16_t start_freq = cur_freq + MIN_START_FREQ;
+	if (start_freq > target_freq) start_freq = target_freq;
+
+	float start_rpm = motor_freq_to_speed(start_freq, motor->step_motor_information.step_model);
+	// 反向时
+	if (dir == NEGATIVE_DIR) start_rpm = -start_rpm;
 	motor->motor_pid.Output     = start_rpm;
 	clamp_last_output           = start_rpm;
 	CRITICAL_EXIT();
-	step_motor_set_pulse_freq(motor, START_UP_PWM_FREQUENCY_HZ);
+	step_motor_set_pulse_freq(motor, start_freq);
 	step_motor_start(motor);
 #endif
 	return  DRV_OK;
@@ -518,7 +514,7 @@ void step_motor_pwm_off(step_motor_t* motor)
  * @param  hold_ms:      到达目标后保持时间 (ms)，0 = 不停留（持续运行）
  * @param  state:        初始斜坡状态
  */
-inline void ramp_step_motor_set(motor_ramp_t* ramp,
+void ramp_step_motor_set(motor_ramp_t* ramp,
                          uint32_t current_freq, uint32_t target_freq,
                          uint16_t step_number, uint32_t hold_ms,
                          ramp_state_t state)
@@ -765,12 +761,11 @@ void pid_control_tick(step_motor_t* motor)
 	// 冷却期内：强制使用起步频率，让电机在低速下重新同步
 	if (cooldown > 0){
 		cooldown--;
-		// 保持起步频率，不执行 PID 计算
-		float start_rpm = motor_freq_to_speed(START_UP_PWM_FREQUENCY_HZ,
-		                     motor->step_motor_information.step_model);
-		pid_apply_output(motor, start_rpm);
+		// 保持起步频率，不执行 PID 计算（符号与 Target 一致）
+		float cooldown_rpm = (motor->motor_pid.Target >= 0) ? MIN_START_RPM : -MIN_START_RPM;
+		pid_apply_output(motor, cooldown_rpm);
 
-		g_pid_debug_output = start_rpm;
+		g_pid_debug_output = cooldown_rpm;
 		g_pid_debug_actual = actual;
 		g_pid_debug_error  = motor->motor_pid.Error;
 		g_pid_debug_freq   = motor->step_motor_information.current_frequency;
@@ -782,37 +777,42 @@ void pid_control_tick(step_motor_t* motor)
 	// 限速 + 限幅（20rpm/周期），防止 Output 飙升太快导致电机失步
 	float output = pid_output_clamp(raw);
 
-	// ---- 失步检测 ----
-	// 条件：PID 输出已饱和到最大值，但实际速度仍然很低
-	if (output >= motor->motor_pid.OutputMax - 1.0f
-	    && self_fabs(actual) < STALL_SPEED_THRESHOLD){
-		stall_count++;
-		if (stall_count >= STALL_DETECT_CYCLES){
-			// 确认失步：执行软重启
+	// ---- 失步检测与软重启 ----
+	// 条件：PID 输出已饱和（接近 OutputMax），但实际速度远低于目标
+	// 连续满足条件时触发软重启：回到起步频率让电机重新建立同步
+	{
+		float target_abs  = self_fabs(motor->motor_pid.Target);
+		float stall_limit = (target_abs > 50.0f)
+			? target_abs * 0.3f          // 高速目标：实际<目标30%即可能失步
+			: STALL_SPEED_THRESHOLD;     // 低速目标：用绝对阈值 30rpm
+
+		if (output >= motor->motor_pid.OutputMax - 1.0f
+		    && self_fabs(actual) < stall_limit){
+			stall_count++;
+			if (stall_count >= STALL_DETECT_CYCLES){
+				// 确认失步：触发软重启
+				stall_count = 0;
+				cooldown    = STALL_RESTART_COOLDOWN;
+
+				float saved_target = motor->motor_pid.Target;
+				CRITICAL_ENTER();
+				motor->motor_pid.interface->reset(&motor->motor_pid);
+				motor->motor_pid.Target = saved_target;
+				float restart_rpm = (saved_target >= 0) ? MIN_START_RPM : -MIN_START_RPM;
+				motor->motor_pid.Output = restart_rpm;
+				clamp_last_output       = restart_rpm;
+				CRITICAL_EXIT();
+
+				step_motor_set_pulse_freq(motor, MIN_START_FREQ);
+				g_pid_debug_output = restart_rpm;
+				g_pid_debug_actual = actual;
+				g_pid_debug_error  = motor->motor_pid.Error;
+				g_pid_debug_freq   = motor->step_motor_information.current_frequency;
+				return;
+			}
+		} else {
 			stall_count = 0;
-			cooldown    = STALL_RESTART_COOLDOWN;
-
-			// 重置 PID 内部状态，从起步频率重新开始
-			float start_rpm = motor_freq_to_speed(START_UP_PWM_FREQUENCY_HZ,
-			                     motor->step_motor_information.step_model);
-			CRITICAL_ENTER();
-			motor->motor_pid.Output    = start_rpm;
-			motor->motor_pid.Error     = 0;
-			motor->motor_pid.LastError = 0;
-			// 清除增量式 PrevError（通过调用 PID_reset 再恢复 Target/Output）
-			float saved_target = motor->motor_pid.Target;
-			motor->motor_pid.interface->reset(&motor->motor_pid);
-			motor->motor_pid.Target = saved_target;
-			motor->motor_pid.Output = start_rpm;
-			clamp_last_output       = start_rpm;
-			CRITICAL_EXIT();
-
-			// 强制回到起步频率
-			step_motor_set_pulse_freq(motor, START_UP_PWM_FREQUENCY_HZ);
-			return;
 		}
-	} else{
-		stall_count = 0;  // 条件不满足，重置计数
 	}
 
 	// 调试：记录 PID 状态

@@ -152,19 +152,17 @@ typedef struct step_motor{
 // 电机参数配置
 #define START_UP_PWM_FREQUENCY_HZ		1062	// 测量环境24V, 带同步轮
 #define DEFAULT_MOTOR_FREQUENCY_HZ		500	// 默认电机频率
-#define MAX_PWM_FREQUENCY_HZ			3215	// 电机测量的最大PWM频率
+#define MAX_PWM_FREQUENCY_HZ			1400	// 电机测量的最大PWM频率
+#define MIN_START_FREQ				100	// 30rpm
+#define MIN_START_RPM				30
 #define MOTOR_STEP_LENGTH_FREQUENCY_HZ		210
 #define	FULL_UP_STEP_LENGTH_ANGLE		1.8f	// 单位:度
 
 // 电机速度控制算法参数配置
 #define CONTROL_CYCLE_MS			2u	// 倒立摆推荐控制周期)
-// 电机 PID 的可靠工作频率上限（实测数据：带载时 1448Hz 以上失步）
-// 设置为 1400Hz 留一定安全余量，对应 ~420rpm@FULL_STEP
-// 如果更换电机/负载/电压，需要重新标定这个值
+// 电机 PID 输出限幅：电机物理上限 1400Hz ≈ 420rpm
+// 实测带载时 1448Hz 以上失步，设为 1400Hz 留安全余量
 #define PID_SAFE_MAX_FREQUENCY_HZ	1400
-
-// 电机PID输出限幅 单位: rpm（对称，支持正反两个方向）
-// 使用 PID_SAFE_MAX_FREQUENCY_HZ 而非 MAX_PWM_FREQUENCY_HZ
 #define MOTOR_PID_OUTPUT_MAX(motor_step_model)	motor_freq_to_speed(PID_SAFE_MAX_FREQUENCY_HZ, motor_step_model)
 #define MOTOR_PID_OUTPUT_MIN(motor_step_model)	(-(float)motor_freq_to_speed(PID_SAFE_MAX_FREQUENCY_HZ, motor_step_model))
 
@@ -181,8 +179,8 @@ static const float PWM_PULSE_TIME_MIN = 0.00001f; // A4988驱动要求STEP脉冲
 
 
 // 工具函数
-uint16_t motor_speed_to_freq(float motor_speed_rpm, motor_step_model_t step_model);
-uint16_t motor_freq_to_arr(uint16_t pulse_freq_hz);
+inline uint16_t motor_speed_to_freq(float motor_speed_rpm, motor_step_model_t step_model);
+inline uint16_t motor_freq_to_arr(uint16_t pulse_freq_hz);
 
 /* ------------------------------------------*/
 

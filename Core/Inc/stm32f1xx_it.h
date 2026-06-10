@@ -71,6 +71,7 @@ void DMA1_Channel3_IRQHandler(void);
 void TIM3_IRQHandler(void);
 void TIM4_IRQHandler(void);
 void USART1_IRQHandler(void);
+void EXTI15_10_IRQHandler(void);
 /* USER CODE BEGIN EFP */
 step_motor_t* find_step_motor_from_tim_table(TIM_HandleTypeDef* htim);
 void tim_register_motor(TIM_HandleTypeDef* htim, step_motor_t* motor);
