@@ -109,7 +109,7 @@ mt6701_t encoder = {
 
 // 自动调参实例（ISR 读写，需通过临界区保护多字节访问）
 volatile PID_AutoTune_t tuner;
-volatile uint8_t auto_tune_active = 0;  // 1=调参模式, 0=正常PID模式
+volatile uint8_t auto_tune_active = 0; // 1=调参模式, 0=正常PID模式
 
 // 波形数据共享变量（ISR 写，主循环读）
 volatile float g_wave_target = 0;
@@ -162,42 +162,41 @@ int main(void)
 	/* 初始化编码器 */
 	mt6701_t encorder = {
 		.sensor = {
-			.hspi			= &hspi1,
-			.cs_gpiox		= GPIOA,
-			.cs_gpio_pin	= GPIO_PIN_4,
-			.htim			= &htim3,
+			.hspi = &hspi1,
+			.cs_gpiox = GPIOA,
+			.cs_gpio_pin = GPIO_PIN_4,
+			.htim = &htim3,
 		}
 	};
 
-	if (angle_sensor_init(&encorder) != DRV_OK)
-	{
+	if (angle_sensor_init(&encorder) != DRV_OK){
 		Error_Handler();
 	}
 
-	float	total_angle = 0.0f;
-	float	angle = 0.0f;
-	float	speed = 0.0f;
+	float total_angle = 0.0f;
+	float angle = 0.0f;
+	float speed = 0.0f;
 
 	/* 初始化角度传感器 */
 	AngleSensor sensor1 = {0};
 
-	AngleSensor_Init (	&sensor1,
-						&hadc1,
-						ADC_CHANNEL_0,
-						ADC_SAMPLETIME_55CYCLES_5,
-						0.09555f,
-						0.0f,
-						0.4f );
+	AngleSensor_Init(&sensor1,
+	                 &hadc1,
+	                 ADC_CHANNEL_0,
+	                 ADC_SAMPLETIME_55CYCLES_5,
+	                 0.09555f,
+	                 0.0f,
+	                 0.4f);
 
-	float	anglesensor = 0.0f;
+	float anglesensor = 0.0f;
 
 	/* USER CODE END 2 */
 	// 初始化自动调参（默认关闭，通过串口命令启动）
 	PID_AutoTune_Init((PID_AutoTune_t*)&tuner,
-				PRESET_AUTOTUNE_AMPLITUDE,
-				PRESET_AUTOTUNE_HYSTERESIS,
-				PRESET_AUTOTUNE_SETPOINT,
-				PRESET_AUTOTUNE_CYCLES);
+	                  PRESET_AUTOTUNE_AMPLITUDE,
+	                  PRESET_AUTOTUNE_HYSTERESIS,
+	                  PRESET_AUTOTUNE_SETPOINT,
+	                  PRESET_AUTOTUNE_CYCLES);
 
 	// 初始化串口命令测试
 	test_cmd_motor_init(&motor, &uart1);
@@ -210,17 +209,13 @@ int main(void)
 	/* USER CODE BEGIN WHILE */
 	while (1){
 		/* USER CODE END WHILE */
-
-		/* USER CODE BEGIN 3 */
-		if (uart1.rx_done){
-			uint8_t buf[256];
-			uint16_t n = uart_recv(&uart1, buf, sizeof(buf));
-		/* USER CODE BEGIN 3 */
 		test_cmd_motor_loop();
 
 		// 波形输出（主循环打印，不阻塞 ISR）
 		if (g_wave_ready){
+			CRITICAL_ENTER();
 			g_wave_ready = 0;
+			CRITICAL_EXIT();
 #if (USE_MOTOR_PID_CONTROL)==1
 			// 调试：打印 PID 输出、编码器速度、误差、实际频率
 			extern volatile float g_pid_debug_output;
@@ -228,15 +223,11 @@ int main(void)
 			extern volatile float g_pid_debug_error;
 			extern volatile uint16_t g_pid_debug_freq;
 			printf("%.1f,%.1f\r\n",
-				g_wave_target,
-				(double)g_pid_debug_actual);
-#else
-
+			       g_wave_target,
+			       (double)g_pid_debug_actual);
 
 #endif
-
 		}
-		DELAY_MS(1000);
 
 		angle_sensor_read_total_angle(&encorder, &total_angle);
 		angle_sensor_read_angle(&encorder, &angle);
@@ -291,7 +282,6 @@ void SystemClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
-
 
 
 /* USER CODE END 4 */
