@@ -5,9 +5,9 @@
 #ifndef TWO_LINK_DRIVER_STEP_MOTOR_H
 #define TWO_LINK_DRIVER_STEP_MOTOR_H
 #include "device.h"
-// #include "PID.h"
+#include "PID.h"
 
-/* RTOS 条件编译头文件 */
+// RTOS 条件编译头文件
 #ifdef USE_FREERTOS
 	#if defined(USE_CMSIS_V2_OS)
 		#include "cmsis_os2.h"
@@ -42,10 +42,9 @@
 	#endif
 #endif
 
-typedef struct step_motor step_motor_t;
-#if !defined(USE_FREERTOS)
-	/* 非阻塞加速斜坡状态机 */
 
+#if !defined(USE_FREERTOS)
+	// 非阻塞加速斜坡状态机
 	typedef enum ramp_state {
 		RAMP_IDLE = 0,
 		RAMP_ACCEL,
@@ -57,19 +56,17 @@ typedef struct step_motor step_motor_t;
 
 	typedef struct motor_ramp {
 		ramp_state_t state;
-		step_motor_t* motor;
 		uint32_t freq_current;
 		uint32_t freq_target;
 		uint32_t freq_step;
 		uint32_t hold_ticks;
 		uint32_t hold_target;   // 保持的总 tick 数
-		uint16_t step_number;	// 指定的步数前进
+		// uint16_t step_number;	// 指定的步数前进
 	} motor_ramp_t;
 #else
 	// FREERTOS直接使用软件定时器
 	typedef struct motor_ramp {
 		ramp_state_t state;
-		step_motor_t* motor;
 		uint16_t freq_current;
 		uint16_t freq_target;
 		uint16_t freq_step;
@@ -78,48 +75,11 @@ typedef struct step_motor step_motor_t;
 	} motor_ramp_t;
 #endif
 
-#if defined(USE_FREERTOS)
-	#define MOTOR_RAMP_TICK_HOOK()  /* 由 FreeRTOS 软件定时器回调调用 */
-#else
-	#define MOTOR_RAMP_TICK_HOOK()			\
-		do{					\
-			motor_ramp_tick(&g_ramp);	\
-		} while (0)
-#endif
-
-#define PWM_DEFAULT_DUTY_CYCLE			50u	// 默认50, 若要更改需要确定实际脉冲时间是否大于1µs
-#define DEFAULT_STEP_MOTOR_DRIVER_MODEL		HR4988
-
-// 电机参数配置 测量环境24V, 带同步轮
-#define START_UP_PWM_FREQUENCY_HZ		1062	// 步进电机启动频率
-#define DEFAULT_MOTOR_FREQUENCY_HZ		500	// 默认电机频率
-#define MAX_PWM_FREQUENCY_HZ			3215	// 电机测量的最大PWM频率
-#define MOTOR_STEP_LENGH_FREQUENCY_HZ		210
-#define	FULL_UP_STEP_LENTH_ANGLE		1.8f	// 单位:度
-
-#define MOTOR_SPEED_MIN				30	// 电机最小速度(全步进模式, 单位RPM)
-// 电机速度控制算法参数配置
-#define CONTROL_CYCLE_MS			2u	// 倒立摆推荐控制周期)
-#define MOTOR_PID_OUTPUT_MAX				// 单位: m/s
-#define MOTOR_PID_OUTPUT_MIN			0
-static const float PWM_PULSE_TIME_MIN = 0.00001f; // A4988驱动要求STEP脉冲最小要大于1e-6s
-
-
 // 支持的电机驱动枚举
 typedef enum motor_driver_model{
 	A4988,
 	HR4988
 } motor_driver_model_t;
-
-// 电机步进方式枚举
-typedef enum motor_step_model{
-	DEFAULT_STEP		= 1,
-	FULL_STEP		= 1,
-	HALF_STEP		= 2,
-	ONE_FOURTH_STEP		= 4,
-	ONE_EIGHTH_STEP		= 8,
-	ONE_SIXTEENTH_STEP	= 16
-} motor_step_model_t;
 
 typedef struct motor_base{
 	GPIO_TypeDef*	dir_gpio_port;	// 方向引脚端口
@@ -165,6 +125,9 @@ typedef struct step_motor_information{
 	motor_step_model_t step_model;
 	motor_direction_t dir;
 	motor_direction_state_t dir_state;
+
+	// ---- 步数限位（角度运动用，与模式无关） ----
+	volatile uint32_t step_remaining;	// 剩余步数（TIM回调中递减）
 } step_motor_information_t;
 
 // 步进电机实例
@@ -172,35 +135,80 @@ typedef struct step_motor{
 	motor_driver_model_t	driver_model;
 	motor_base_t		motor_base_info;
 	step_motor_information_t step_motor_information;
+#if !defined(USE_FREERTOS)
+	#if (USE_MOTOR_PID_CONTROL==0)
+		motor_ramp_t	ramp;		// 斜坡状态机（仅开环模式）
+	#endif
+#endif
+#if (USE_MOTOR_PID_CONTROL==1)
+	PID_t			motor_pid;
+#endif
 } step_motor_t;
 
-/* 工具函数 */
-uint16_t motor_speed_to_freq(float motor_speed_rpm, motor_step_model_t step_model);
-uint16_t motor_freq_to_arr(uint16_t pulse_freq_hz);
+// 相关参数定义
+#define PWM_DEFAULT_DUTY_CYCLE			50u	// 默认50, 若要更改需要确定实际脉冲时间是否大于1µs
+#define DEFAULT_STEP_MOTOR_DRIVER_MODEL		HR4988
+
+// 电机参数配置
+#define START_UP_PWM_FREQUENCY_HZ		1062	// 测量环境24V, 带同步轮
+#define DEFAULT_MOTOR_FREQUENCY_HZ		500	// 默认电机频率
+#define MAX_PWM_FREQUENCY_HZ			1400	// 电机测量的最大PWM频率
+#define MIN_START_FREQ				100	// 30rpm
+#define MIN_START_RPM				30
+#define MOTOR_STEP_LENGTH_FREQUENCY_HZ		210
+#define	FULL_UP_STEP_LENGTH_ANGLE		1.8f	// 单位:度
+
+// 电机速度控制算法参数配置
+#define CONTROL_CYCLE_MS			2u	// 倒立摆推荐控制周期)
+// 电机 PID 输出限幅：电机物理上限 1400Hz ≈ 420rpm
+// 实测带载时 1448Hz 以上失步，设为 1400Hz 留安全余量
+#define PID_SAFE_MAX_FREQUENCY_HZ	1400
+#define MOTOR_PID_OUTPUT_MAX(motor_step_model)	motor_freq_to_speed(PID_SAFE_MAX_FREQUENCY_HZ, motor_step_model)
+#define MOTOR_PID_OUTPUT_MIN(motor_step_model)	(-(float)motor_freq_to_speed(PID_SAFE_MAX_FREQUENCY_HZ, motor_step_model))
+
+#define MOTOR_ACCEL_LIMIT   20.0f   // rpm/周期，防止启动失步
+#define MOTOR_MAX_RPM       960.0f  // 最大输出转速
+#define PID_DIVIDER         2       // PID 周期 = 采样周期 × 2
+
+// 失步检测与软重启参数
+#define STALL_SPEED_THRESHOLD   30.0f   // rpm，低于此速度视为"可能失步"
+#define STALL_DETECT_CYCLES     50      // 连续多少个 PID 周期确认失步（50×2ms=100ms）
+#define STALL_RESTART_COOLDOWN  25      // 软重启后冷却周期数（25×2ms=50ms），让电机在低频重新同步
+
+static const float PWM_PULSE_TIME_MIN = 0.00001f; // A4988驱动要求STEP脉冲最小要大于1e-6s
+
+
+// 工具函数
+inline uint16_t motor_speed_to_freq(float motor_speed_rpm, motor_step_model_t step_model);
+inline uint16_t motor_freq_to_arr(uint16_t pulse_freq_hz);
 
 /* ------------------------------------------*/
 
-/* 应用层调用函数 */
+// 应用层调用函数
 device_err_t step_motor_init(step_motor_t* motor);
 device_err_t step_motor_deinit(step_motor_t* motor);
 device_err_t step_motor_set_step_model(step_motor_t* motor);
 device_err_t step_motor_start(step_motor_t* motor);
 device_err_t step_motor_stop(step_motor_t* motor);
-// device_err_t step_motor_set_speed_size(step_motor_t* motor, uint32_t speed);
 device_err_t step_motor_set_speed(step_motor_t* motor,
-				const float speed,
-				const motor_direction_t dir);
+				float speed,
+				motor_direction_t dir);
 device_err_t step_motor_move_angle(step_motor_t* motor, motor_direction_t dir, float angle);
-device_err_t step_motor_update_angle(const step_motor_t* motor, motor_direction_t dir,
-                                     const float angle);
 device_err_t step_motor_set_pulse_freq(step_motor_t* motor, uint16_t pulse_freq_hz);
-
-device_err_t step_motor_set_absolute_position(step_motor_t* motor, const uint32_t absolute_position);
+device_err_t step_motor_set_direction(step_motor_t* motor, motor_direction_t dir);
 void         step_motor_pwm_off(step_motor_t* motor);
-void ramp_step_motor_set(motor_ramp_t* ramp, step_motor_t* motor,
-		uint32_t current_freq,
-		uint32_t target_freq,
-		uint16_t step_number,
-		uint32_t hold_ms, ramp_state_t state);
+
+#if (USE_MOTOR_PID_CONTROL==0)
+	void ramp_step_motor_set(motor_ramp_t* ramp,
+			uint32_t current_freq,
+			uint32_t target_freq,
+			uint16_t step_number,
+			uint32_t hold_ms, ramp_state_t state);
+	device_err_t ramp_step_motor_tick(motor_ramp_t* ramp, step_motor_t* motor);
+#elif (USE_MOTOR_PID_CONTROL==1)
+float pid_output_clamp(float raw);
+void pid_apply_output(step_motor_t* motor, float output);
+void pid_control_tick(step_motor_t* motor);
+#endif
 
 #endif //TWO_LINK_DRIVER_STEP_MOTOR_H

@@ -24,11 +24,15 @@
 #include "tim.h"
 #include "usart.h"
 #include "gpio.h"
+#include "stm32f1xx_it.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "../../device/include/driver_step_motor.h"
 #include "../../device/include/test_step_motor.h"
+#include "../../device/include/test_cmd_motor.h"
+#include "../../device/include/auto_tune.h"
+#include "../../device/include/mt6701.h"
 #include "../../device/include/uart.h"
 #include "mt6701.h"
 #include "angle_sensor.h"
@@ -52,7 +56,6 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-extern motor_ramp_t g_ramp;
 
 static uint8_t rx_buf[UART_RX_BUF_SIZE];
 
@@ -71,6 +74,47 @@ void SystemClock_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+step_motor_t motor = {
+	HR4988,
+	{
+		.dir_gpio_pin = GPIO_PIN_5,
+		.dir_gpio_port = GPIOB,
+		.step_gpio_port = MOTOR_STEP_PIN_GPIO_Port,
+		.step_gpio_pin = MOTOR_STEP_PIN_Pin,
+		.ms1_gpio_port = MOTOR_MS1_PIN_GPIO_Port,
+		.ms1_gpio_pin = MOTOR_MS1_PIN_Pin,
+		.ms2_gpio_port = MOTOR_MS2_PIN_GPIO_Port,
+		.ms2_gpio_pin = MOTOR_MS2_PIN_Pin,
+		.ms3_gpio_port = MOTOR_MS3_PIN_GPIO_Port,
+		.ms3_gpio_pin = MOTOR_MS3_PIN_Pin,
+		.tim_handle = &htim4,
+		.tim_channel = TIM_CHANNEL_1
+	},
+	{
+		.current_frequency = 0,
+		.step_model = DEFAULT_STEP,
+		.dir = POSITIVE_DIR,
+	}
+};
+
+// MT6701 磁编码器实例
+mt6701_t encoder = {
+	.sensor = {
+		.hspi = &hspi1,
+		.cs_gpiox = MT6701_CSN_GPIO_Port,
+		.cs_gpio_pin = MT6701_CSN_Pin,
+		.htim = &htim3,
+	},
+};
+
+// 自动调参实例（ISR 读写，需通过临界区保护多字节访问）
+volatile PID_AutoTune_t tuner;
+volatile uint8_t auto_tune_active = 0;  // 1=调参模式, 0=正常PID模式
+
+// 波形数据共享变量（ISR 写，主循环读）
+volatile float g_wave_target = 0;
+volatile float g_wave_actual = 0;
+volatile uint8_t g_wave_ready = 0;
 
 /* USER CODE END 0 */
 
@@ -110,28 +154,6 @@ int main(void)
 	MX_ADC1_Init();
 	/* USER CODE BEGIN 2 */
 	uart_init(&uart1);
-	step_motor_t motor = {
-		HR4988,
-		{
-			.dir_gpio_pin = GPIO_PIN_5,
-			.dir_gpio_port = GPIOB,
-			.step_gpio_port = MOTOR_STEP_PIN_GPIO_Port,
-			.step_gpio_pin = MOTOR_STEP_PIN_Pin,
-			.ms1_gpio_port = MOTOR_MS1_PIN_GPIO_Port,
-			.ms1_gpio_pin = MOTOR_MS1_PIN_Pin,
-			.ms2_gpio_port = MOTOR_MS2_PIN_GPIO_Port,
-			.ms2_gpio_pin = MOTOR_MS2_PIN_Pin,
-			.ms3_gpio_port = MOTOR_MS3_PIN_GPIO_Port,
-			.ms3_gpio_pin = MOTOR_MS3_PIN_Pin,
-			.tim_handle = &htim4,
-			.tim_channel = TIM_CHANNEL_1
-		},
-		{
-			.current_frequency = 0,
-			.step_model = DEFAULT_STEP,
-			.dir = POSITIVE_DIR,
-		}
-	};
 
 	if (step_motor_init(&motor) != DRV_OK){
 		Error_Handler();
@@ -170,6 +192,19 @@ int main(void)
 	float	anglesensor = 0.0f;
 
 	/* USER CODE END 2 */
+	// 初始化自动调参（默认关闭，通过串口命令启动）
+	PID_AutoTune_Init((PID_AutoTune_t*)&tuner,
+				PRESET_AUTOTUNE_AMPLITUDE,
+				PRESET_AUTOTUNE_HYSTERESIS,
+				PRESET_AUTOTUNE_SETPOINT,
+				PRESET_AUTOTUNE_CYCLES);
+
+	// 初始化串口命令测试
+	test_cmd_motor_init(&motor, &uart1);
+	// 测试普通电机
+	// test_step_motor_run_all(&motor);
+	// step_motor_set_speed(&motor, 500, POSITIVE_DIR);
+	/* USER CODE END 2 */
 
 	/* Infinite loop */
 	/* USER CODE BEGIN WHILE */
@@ -180,6 +215,26 @@ int main(void)
 		if (uart1.rx_done){
 			uint8_t buf[256];
 			uint16_t n = uart_recv(&uart1, buf, sizeof(buf));
+		/* USER CODE BEGIN 3 */
+		test_cmd_motor_loop();
+
+		// 波形输出（主循环打印，不阻塞 ISR）
+		if (g_wave_ready){
+			g_wave_ready = 0;
+#if (USE_MOTOR_PID_CONTROL)==1
+			// 调试：打印 PID 输出、编码器速度、误差、实际频率
+			extern volatile float g_pid_debug_output;
+			extern volatile float g_pid_debug_actual;
+			extern volatile float g_pid_debug_error;
+			extern volatile uint16_t g_pid_debug_freq;
+			printf("%.1f,%.1f\r\n",
+				g_wave_target,
+				(double)g_pid_debug_actual);
+#else
+
+
+#endif
+
 		}
 		DELAY_MS(1000);
 
@@ -238,6 +293,7 @@ void SystemClock_Config(void)
 /* USER CODE BEGIN 4 */
 
 
+
 /* USER CODE END 4 */
 
 /**
@@ -248,7 +304,7 @@ void Error_Handler(void)
 {
 	/* USER CODE BEGIN Error_Handler_Debug */
 	/* User can add his own implementation to report the HAL error return state */
-	__disable_irq();
+	CRITICAL_ENTER();
 	while (1){
 	}
 	/* USER CODE END Error_Handler_Debug */

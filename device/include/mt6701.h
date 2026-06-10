@@ -87,4 +87,10 @@ device_err_t angle_sensor_read_speed(mt6701_t* dev, float* speed);
  */
 device_err_t angle_sensor_read_total_angle(mt6701_t* dev, float* angle);
 
+/**
+ * @brief  编码器速度更新（TIM3 中断调用，1ms 周期）
+ * @note   带一阶低通滤波，结果存入 g_dev->sensor.speed（rpm）
+ */
+void encoder_update_speed(void);
+
 #endif /* __MT6701_H */

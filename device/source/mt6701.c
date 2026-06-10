@@ -154,4 +154,41 @@ void HAL_SPI_ErrorCallback(SPI_HandleTypeDef* hspi)
 	HAL_SPI_TransmitReceive_DMA(s->hspi, dev->tx_buf, dev->rx_buf, 3);
 }
 
+/* ======================== TIM3: 编码器采样 ======================== */
+/**
+ * @brief  编码器速度更新（TIM3 中断，1ms 周期）
+ * @note   一阶低通滤波消除编码器噪声
+ *         alpha=0.15 → 截止频率约 24Hz
+ */
+void encoder_update_speed(void)
+{
+	if (g_dev == NULL) return;
 
+	angle_sensor_t* s = &g_dev->sensor;
+
+	if (s->first_sample){
+		s->first_sample = 0;
+		s->angle_last = s->angle;
+		s->speed = 0.0f;
+	}
+
+	// 每隔 SPEED_CALC_DIV 次 (5ms) 计算一次速度，增大角度差以减少量化噪声
+	#define SPEED_CALC_DIV  5
+	static uint8_t calc_div = 0;
+	if (++calc_div < SPEED_CALC_DIV) return;
+	calc_div = 0;
+
+	float diff = cycle_diff(s->angle - s->angle_last, MT6701_ANGLE_MAX);
+	s->angle_last = s->angle;
+
+	// 5ms 累积的角速度 → 单个采样噪声降低为 1/5
+	float omega_raw = diff * speed_calc_freq / SPEED_CALC_DIV;  // rad/s
+	float speed_raw = omega_to_rpm(omega_raw);                  // rpm
+
+	// 一阶低通: y = alpha*x + (1-alpha)*y_prev
+	// alpha=0.3, 5ms 周期 → 截止频率约 11Hz
+	#define SPEED_FILTER_ALPHA  0.3f
+	s->speed = SPEED_FILTER_ALPHA * speed_raw
+	         + (1.0f - SPEED_FILTER_ALPHA) * s->speed;
+	s->speed_raw = (int32_t)(omega_raw * 100.0f);
+}
