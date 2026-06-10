@@ -24,12 +24,15 @@
 #include "tim.h"
 #include "usart.h"
 #include "gpio.h"
+#include "stm32f1xx_it.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "mt6701.h"
 #include "../../device/include/driver_step_motor.h"
 #include "../../device/include/test_step_motor.h"
+#include "../../device/include/test_cmd_motor.h"
+#include "../../device/include/auto_tune.h"
+#include "../../device/include/mt6701.h"
 #include "../../device/include/uart.h"
 /* USER CODE END Includes */
 
@@ -104,7 +107,7 @@ mt6701_t encoder = {
 
 // 自动调参实例（ISR 读写，需通过临界区保护多字节访问）
 volatile PID_AutoTune_t tuner;
-volatile uint8_t auto_tune_active = 0; // 1=调参模式, 0=正常PID模式
+volatile uint8_t auto_tune_active = 0;  // 1=调参模式, 0=正常PID模式
 
 // 波形数据共享变量（ISR 写，主循环读）
 volatile float g_wave_target = 0;
@@ -164,22 +167,14 @@ int main(void)
 
 	// 初始化自动调参（默认关闭，通过串口命令启动）
 	PID_AutoTune_Init((PID_AutoTune_t*)&tuner,
-	                  PRESET_AUTOTUNE_AMPLITUDE,
-	                  PRESET_AUTOTUNE_HYSTERESIS,
-	                  PRESET_AUTOTUNE_SETPOINT,
-	                  PRESET_AUTOTUNE_CYCLES);
+				PRESET_AUTOTUNE_AMPLITUDE,
+				PRESET_AUTOTUNE_HYSTERESIS,
+				PRESET_AUTOTUNE_SETPOINT,
+				PRESET_AUTOTUNE_CYCLES);
 
 	// 初始化串口命令测试
 	test_cmd_motor_init(&motor, &uart1);
 	// 测试普通电机
-	/* 运行全部单元测试
-	 * 测试1: 电机调速 (step_motor_set_speed)
-	 * 测试2: 指定角度 (step_motor_move_angle)
-	 * 测试3: 电机方向更改
-	 * 测试4: 持续运行 + 周期性换向
-	 * 测试5: 设置不同步长模式
-	 * 123456
-	 */
 	// test_step_motor_run_all(&motor);
 	// step_motor_set_speed(&motor, 500, POSITIVE_DIR);
 	/* USER CODE END 2 */
@@ -201,18 +196,14 @@ int main(void)
 			extern volatile float g_pid_debug_actual;
 			extern volatile float g_pid_debug_error;
 			extern volatile uint16_t g_pid_debug_freq;
-			// printf("%.1f,%.1f\r\n",
-			//        g_wave_target,
-			//        (double)g_pid_debug_actual);
-			printf("%.1f,%.1f,%.1f,%.1f\r\n",
-			       g_wave_target,
-			       (double)g_pid_debug_actual,
-			       g_pid_debug_output,
-			       g_pid_debug_error);
+			printf("%.1f,%.1f\r\n",
+				g_wave_target,
+				(double)g_pid_debug_actual);
 #else
 
 
 #endif
+
 		}
 	}
 	/* USER CODE END 3 */

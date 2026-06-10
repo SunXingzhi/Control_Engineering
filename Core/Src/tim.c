@@ -21,8 +21,11 @@
 #include "tim.h"
 
 /* USER CODE BEGIN 0 */
-#include "../../device/include/mt6701.h"
-extern uint32_t tim_clock_freq;
+
+
+extern uint32_t		tim_clock_freq;
+
+
 /* USER CODE END 0 */
 
 TIM_HandleTypeDef htim3;
@@ -117,8 +120,8 @@ void MX_TIM4_Init(void)
     Error_Handler();
   }
   /* USER CODE BEGIN TIM4_Init 2 */
-  // 获取时钟频率MX配置
-  tim_clock_freq  = HAL_RCC_GetPCLK1Freq() * 2;
+	// 获取时钟频率MX配置
+	tim_clock_freq = HAL_RCC_GetPCLK1Freq() * 2;
   /* USER CODE END TIM4_Init 2 */
   HAL_TIM_MspPostInit(&htim4);
 
@@ -151,7 +154,7 @@ void HAL_TIM_Base_MspInit(TIM_HandleTypeDef* tim_baseHandle)
     __HAL_RCC_TIM4_CLK_ENABLE();
 
     /* TIM4 interrupt Init */
-    HAL_NVIC_SetPriority(TIM4_IRQn, 1, 0);
+    HAL_NVIC_SetPriority(TIM4_IRQn, 2, 0);
     HAL_NVIC_EnableIRQ(TIM4_IRQn);
   /* USER CODE BEGIN TIM4_MspInit 1 */
 
