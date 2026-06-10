@@ -179,8 +179,8 @@ static const float PWM_PULSE_TIME_MIN = 0.00001f; // A4988驱动要求STEP脉冲
 
 
 // 工具函数
-inline uint16_t motor_speed_to_freq(float motor_speed_rpm, motor_step_model_t step_model);
-inline uint16_t motor_freq_to_arr(uint16_t pulse_freq_hz);
+uint16_t motor_speed_to_freq(float motor_speed_rpm, motor_step_model_t step_model);
+uint16_t motor_freq_to_arr(uint16_t pulse_freq_hz);
 
 /* ------------------------------------------*/
 
