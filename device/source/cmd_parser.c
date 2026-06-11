@@ -82,6 +82,7 @@ void cmd_send_help(uart_base_t* uart)
 	SEND_STR("| R                		Query auto-tune result		|\r\n");
 	SEND_STR("| X:<target>,<kp>,<ki>,<kd>	Set PID params + target		|\r\n");
 	SEND_STR("| H				Show this help			|\r\n");
+	SEND_STR("| C:<run mode>			Set run mode (001/002)		|\r\n");
 	SEND_STR("===============================================================\r\n");
 
 	s_uart = prev;
