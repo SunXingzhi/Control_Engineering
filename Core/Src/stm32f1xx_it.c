@@ -58,7 +58,8 @@
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
+volatile uint8_t g_limit_right_flag = 0;
+volatile uint8_t g_limit_left_flag = 0;
 /* USER CODE END 0 */
 
 /* External variables --------------------------------------------------------*/
@@ -300,6 +301,26 @@ static tim_callback_entry_t callback_table[8] = {0};
 
 extern mt6701_t* g_dev;
 
+/**
+ * @brief  EXTI 中断回调（HAL_GPIO_EXTI_IRQHandler 触发后自动调用）
+ *         限位开关压下时 IO 为 LOW（下降沿），松开时为 HIGH（上升沿）
+ *         仅在下降沿（按下）时置标志，上升沿（松开）忽略
+ */
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+    if (GPIO_Pin == MOTOR_LIMIT_CLOSE_Pin) {
+        // PA11 右限位：按下时为 LOW，RISING_FALLING 下降沿触发
+        if (HAL_GPIO_ReadPin(MOTOR_LIMIT_CLOSE_GPIO_Port, MOTOR_LIMIT_CLOSE_Pin) == GPIO_PIN_RESET) {
+            g_limit_right_flag = 1;
+        }
+    }
+    else if (GPIO_Pin == MOTOR_LIMIT_REMOTE_Pin) {
+        // PA12 左限位：按下时为 LOW，RISING_FALLING 下降沿触发
+        if (HAL_GPIO_ReadPin(MOTOR_LIMIT_REMOTE_GPIO_Port, MOTOR_LIMIT_REMOTE_Pin) == GPIO_PIN_RESET) {
+            g_limit_left_flag = 1;
+        }
+    }
+}
 
 /* ======================== 注册 / 查找 ======================== */
 

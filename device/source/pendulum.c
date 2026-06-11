@@ -21,6 +21,8 @@ extern step_motor_t motor;
 extern mt6701_t encorder;       /* 注意：main.c 中变量名为 encorder */
 extern AngleSensor sensor1;
 extern uart_base_t uart1;
+extern volatile uint8_t g_limit_right_flag;
+extern volatile uint8_t g_limit_left_flag;
 
 /* ========== 内部函数前向声明 ========== */
 static void do_calibration(pendulum_ctx_t *ctx);
@@ -279,7 +281,11 @@ static uint8_t check_limit_hit(pendulum_ctx_t *ctx, float total_angle, motor_dir
  */
 static void check_limit_switches(pendulum_ctx_t *ctx)
 {
-    if ((LIMIT_RIGHT_IS_HIT() || LIMIT_LEFT_IS_HIT()) && ctx->state != STATE_CALIBRATE) {
+    if (ctx->state == STATE_CALIBRATE) return;  // 校准模式由 do_calibration 自己处理
+
+    if (g_limit_right_flag || g_limit_left_flag) {
+        g_limit_right_flag = 0;
+        g_limit_left_flag = 0;
         step_motor_stop(&motor);
         ctx->limit_tripped = 1;
     }
