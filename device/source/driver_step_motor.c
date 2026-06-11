@@ -311,7 +311,7 @@ device_err_t step_motor_stop(step_motor_t* motor)
  * @note   如果传入速度与步进模式计算出的频率大于步进电机支持的最大频率，
  *         则强制转换为最大频率（MAX_PWM_FREQUENCY_HZ）
  */
-device_err_t step_motor_set_speed(step_motor_t* motor, const float speed, const motor_direction_t dir)
+device_err_t step_motor_set_speed(step_motor_t* motor, const float speed, motor_direction_t dir)
 {
 	float converted_speed	= 0;
 	if (motor == NULL) return DRV_ERR_NULL;
@@ -334,6 +334,7 @@ device_err_t step_motor_set_speed(step_motor_t* motor, const float speed, const 
 	}
 	if (speed<0){
 		converted_speed	= -speed;
+		dir				= -motor->step_motor_information.dir;
 	} else{
 		converted_speed	= speed;
 	}

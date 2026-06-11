@@ -10,8 +10,9 @@
 #include <stdio.h>
 
 /* 模块内部状态 */
-static uart_base_t*   s_uart  = NULL;
-static step_motor_t*  s_motor = NULL;
+static uart_base_t*		s_uart  = NULL;
+static step_motor_t*	s_motor = NULL;
+static pendulum_ctx_t*	s_pendulum = NULL;
 
 /* 自动调参实例（定义在 main.c 中） */
 extern volatile PID_AutoTune_t tuner;
@@ -38,6 +39,11 @@ void cmd_parser_init(uart_base_t* uart, step_motor_t* motor)
 {
 	s_uart  = uart;
 	s_motor = motor;
+}
+
+void cmd_parser_set_pendulum(pendulum_ctx_t* ctx)
+{
+	s_pendulum = ctx;
 }
 
 /**
@@ -76,6 +82,7 @@ void cmd_send_help(uart_base_t* uart)
 	SEND_STR("| R                		Query auto-tune result		|\r\n");
 	SEND_STR("| X:<target>,<kp>,<ki>,<kd>	Set PID params + target		|\r\n");
 	SEND_STR("| H				Show this help			|\r\n");
+	SEND_STR("| C:<run mode>			Set run mode (001/002)		|\r\n");
 	SEND_STR("===============================================================\r\n");
 
 	s_uart = prev;
@@ -185,6 +192,16 @@ static cmd_t parse_cmd(const uint8_t* data, uint16_t len)
 					break;
 				}
 			}
+		}
+		break;
+
+	case 'C':	// C:001 = 校位; C:002 = 起摆
+	case 'c':
+		if (len >= 5 && data[1] == ':'){
+			if (memcmp(data + 2, "001", 3) == 0)
+				cmd.id = CMD_PENDULUM_CALIB;
+			else if (memcmp(data + 2, "002", 3) == 0)
+				cmd.id = CMD_PENDULUM_SWING;
 		}
 		break;
 
@@ -374,6 +391,38 @@ static void execute_cmd(const cmd_t* cmd)
 	case CMD_HELP:
 		cmd_send_help(s_uart);
 		break;
+
+	case CMD_PENDULUM_CALIB: {
+			if (s_pendulum == NULL) {
+				send_err("pendulum not initialized");
+				break;
+			}
+			if (s_pendulum->state != STATE_IDLE && s_pendulum->state != STATE_CALIB_DONE) {
+				send_err("pendulum busy");
+				break;
+			}
+			s_pendulum->state = STATE_CALIBRATE;
+			s_pendulum->calib_phase = 0;
+			s_pendulum->calib.calibrated = 0;
+			s_pendulum->limit_tripped = 0;
+			step_motor_set_speed(s_motor, CALIB_SPEED_RPM, POSITIVE_DIR);
+			SEND_STR("CALIB: start, seeking right limit...\r\n");
+			break;
+	}
+
+	case CMD_PENDULUM_SWING: {
+			if (s_pendulum == NULL) {
+				send_err("pendulum not initialized");
+				break;
+			}
+			if (!s_pendulum->calib.calibrated) {
+				send_err("not calibrated, send C:001 first");
+				break;
+			}
+			s_pendulum->state = STATE_MOVE_MID;
+			SEND_STR("SWING: moving to center...\r\n");
+			break;
+	}
 
 	default:
 		send_err("unknown cmd (H for help)");
