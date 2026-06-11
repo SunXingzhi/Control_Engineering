@@ -1,22 +1,22 @@
-#include "../include/uart.h"
+﻿#include "../include/uart.h"
 
 #ifdef USE_FREERTOS
 #include "FreeRTOS.h"
 #include "task.h"
 #endif
 
-/* 单字节接收暂存 */
+/* 鍗曞瓧鑺傛帴鏀舵殏瀛?*/
 static uint8_t uart_rx_byte;
 
-/* 当前活跃 UART，供中断回调使用 */
+/* 褰撳墠娲昏穬 UART锛屼緵涓柇鍥炶皟浣跨敤 */
 static uart_base_t* uart_active;
 
 #ifdef USE_FREERTOS
-/* 接收完成时通知的任务句柄 */
+/* 鎺ユ敹瀹屾垚鏃堕€氱煡鐨勪换鍔″彞鏌?*/
 static TaskHandle_t uart_notify_task = NULL;
 #endif
 
-/* 启动单字节中断接收链 */
+/* 鍚姩鍗曞瓧鑺備腑鏂帴鏀堕摼 */
 static void uart_start_rx(uart_base_t* uart)
 {
 	uart_active = uart;
@@ -26,7 +26,7 @@ static void uart_start_rx(uart_base_t* uart)
 	}
 }
 
-/* HAL 接收回调：逐字节存入缓冲，溢出则丢弃 */
+/* HAL 鎺ユ敹鍥炶皟锛氶€愬瓧鑺傚瓨鍏ョ紦鍐诧紝婧㈠嚭鍒欎涪寮?*/
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef* huart)
 {
 	if (uart_active == NULL || huart != uart_active->huart){
@@ -38,12 +38,13 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef* huart)
 	if (uart->rx_len < uart->rx_buf_size){
 		uart->rx_buf[uart->rx_len] = uart_rx_byte;
 		uart->rx_len++;
+	uart->last_rx_tick = HAL_GetTick();
 	}
 
 	HAL_UART_Receive_IT(uart->huart, &uart_rx_byte, 1);
 }
 
-/* HAL 错误回调：重启接收 */
+/* HAL 閿欒鍥炶皟锛氶噸鍚帴鏀?*/
 void HAL_UART_ErrorCallback(UART_HandleTypeDef* huart)
 {
 	if (uart_active != NULL && huart == uart_active->huart){
@@ -51,14 +52,14 @@ void HAL_UART_ErrorCallback(UART_HandleTypeDef* huart)
 	}
 }
 
-/* IDLE 中断预处理，供 USART1_IRQHandler 调用
- * 返回 1 表示已处理 IDLE，调用方跳过 HAL_UART_IRQHandler
- * 返回 0 表示非 IDLE 中断，调用方继续走 HAL_UART_IRQHandler
+/* IDLE 涓柇棰勫鐞嗭紝渚?USART1_IRQHandler 璋冪敤
+ * 杩斿洖 1 琛ㄧず宸插鐞?IDLE锛岃皟鐢ㄦ柟璺宠繃 HAL_UART_IRQHandler
+ * 杩斿洖 0 琛ㄧず闈?IDLE 涓柇锛岃皟鐢ㄦ柟缁х画璧?HAL_UART_IRQHandler
  *
- * 防止 RXNE+IDLE 竞态丢字节：末字节到达时两标志可能同时置位，
- * 若直接清 IDLE（读 DR）会丢失该字节。先判 RXNE：
- *   两标志均置位 → 交 HAL 统一处理（读 DR 存字节并清标志）
- *   仅 IDLE 置位 → 手动清除（此时读 DR 无害） */
+ * 闃叉 RXNE+IDLE 绔炴€佷涪瀛楄妭锛氭湯瀛楄妭鍒拌揪鏃朵袱鏍囧織鍙兘鍚屾椂缃綅锛?
+ * 鑻ョ洿鎺ユ竻 IDLE锛堣 DR锛変細涓㈠け璇ュ瓧鑺傘€傚厛鍒?RXNE锛?
+ *   涓ゆ爣蹇楀潎缃綅 鈫?浜?HAL 缁熶竴澶勭悊锛堣 DR 瀛樺瓧鑺傚苟娓呮爣蹇楋級
+ *   浠?IDLE 缃綅 鈫?鎵嬪姩娓呴櫎锛堟鏃惰 DR 鏃犲锛?*/
 int uart_idle_hook(UART_HandleTypeDef* huart)
 {
 	if (uart_active == NULL || huart != uart_active->huart){
@@ -90,9 +91,9 @@ int uart_idle_hook(UART_HandleTypeDef* huart)
 	return 0;
 }
 
-/* 初始化驱动：使能 IDLE 中断，启动接收
- * 前置条件：CubeMX 已完成 GPIO、UART、NVIC 初始化
- *           且已调用 MX_USART1_UART_Init() */
+/* 鍒濆鍖栭┍鍔細浣胯兘 IDLE 涓柇锛屽惎鍔ㄦ帴鏀?
+ * 鍓嶇疆鏉′欢锛欳ubeMX 宸插畬鎴?GPIO銆乁ART銆丯VIC 鍒濆鍖?
+ *           涓斿凡璋冪敤 MX_USART1_UART_Init() */
 device_err_t uart_init(uart_base_t* uart)
 {
 	if (uart == NULL || uart->huart == NULL || uart->rx_buf == NULL){
@@ -101,7 +102,7 @@ device_err_t uart_init(uart_base_t* uart)
 
 	UART_HandleTypeDef* huart = uart->huart;
 
-	/* 使能 IDLE 中断（CubeMX/HAL 在 F1 上默认不开启） */
+	/* 浣胯兘 IDLE 涓柇锛圕ubeMX/HAL 鍦?F1 涓婇粯璁や笉寮€鍚級 */
 	__HAL_UART_ENABLE_IT(huart, UART_IT_IDLE);
 
 	uart->rx_len = 0;
@@ -112,7 +113,7 @@ device_err_t uart_init(uart_base_t* uart)
 	return DRV_OK;
 }
 
-/* 阻塞发送 */
+/* 闃诲鍙戦€?*/
 device_err_t uart_send(uart_base_t* uart, const uint8_t* data, uint16_t len)
 {
 	if (uart == NULL || data == NULL || len == 0){
@@ -126,7 +127,7 @@ device_err_t uart_send(uart_base_t* uart, const uint8_t* data, uint16_t len)
 	return DRV_OK;
 }
 
-/* 读取已接收帧到用户缓冲区，读后清空 */
+/* 璇诲彇宸叉帴鏀跺抚鍒扮敤鎴风紦鍐插尯锛岃鍚庢竻绌?*/
 uint16_t uart_recv(uart_base_t* uart, uint8_t* buf, uint16_t len)
 {
 	if (uart == NULL || buf == NULL || len == 0){
@@ -140,7 +141,9 @@ uint16_t uart_recv(uart_base_t* uart, uint8_t* buf, uint16_t len)
 #else
 	__disable_irq();
 #endif
-	if (uart->rx_done && uart->rx_len > 0){
+	uint8_t frame_ready = uart->rx_done
+	    || (uart->rx_len > 0 && (HAL_GetTick() - uart->last_rx_tick) >= 5);
+	if (frame_ready && uart->rx_len > 0){
 		copy_len = (uart->rx_len < len) ? uart->rx_len : len;
 		for (uint16_t i = 0; i < copy_len; i++){
 			buf[i] = uart->rx_buf[i];

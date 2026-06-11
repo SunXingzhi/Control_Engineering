@@ -196,7 +196,7 @@ int main(void)
 			extern volatile float g_pid_debug_actual;
 			extern volatile float g_pid_debug_error;
 			extern volatile uint16_t g_pid_debug_freq;
-			printf("%.1f,%.1f%.1f,%.1f\r\n",
+			printf("%.1f,%.1f,%.1f,%.1f\r\n",
 				g_wave_target,
 				(double)g_pid_debug_actual,
 				g_pid_debug_output,
