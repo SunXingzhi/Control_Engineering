@@ -37,6 +37,7 @@
 #include "mt6701.h"
 #include "angle_sensor.h"
 #include "pendulum.h"
+#include "cmd_parser.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -196,14 +197,17 @@ int main(void)
 
 	// 初始化串口命令测试
 	test_cmd_motor_init(&motor, &uart1);
+
+	cmd_parser_set_pendulum(&pendulum);
+
 	/* USER CODE END 2 */
 
 	/* Infinite loop */
 	/* USER CODE BEGIN WHILE */
 	while (1){
 		/* USER CODE END WHILE */
-// 		test_cmd_motor_loop();
-//
+		test_cmd_motor_loop();
+
 // 		// 波形输出（主循环打印，不阻塞 ISR）
 // 		if (g_wave_ready){
 // 			CRITICAL_ENTER();
@@ -228,13 +232,6 @@ int main(void)
 		// angle_sensor_read_speed(&encorder, &speed);
 		// anglesensor = AngleSensor_GetFilteredAngle(&sensor1);
 		//
-		/* 起摆串口命令解析 */
-		if (uart1.rx_done) {
-			uint8_t cmd_buf[64];
-			uint16_t cmd_len = 0;
-			cmd_len = uart_recv(&uart1, cmd_buf, sizeof(cmd_buf));
-			pendulum_parse_command(&pendulum, cmd_buf, cmd_len);
-		}
 
 		/* 起摆状态机 */
 		pendulum_loop(&pendulum, total_angle, anglesensor);

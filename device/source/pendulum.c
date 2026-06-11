@@ -31,35 +31,6 @@ static uint8_t check_limit_hit(pendulum_ctx_t *ctx, float total_angle, motor_dir
 static void check_limit_switches(pendulum_ctx_t *ctx);
 
 /* ============================================================ */
-/*                        串口命令解析                           */
-/* ============================================================ */
-
-void pendulum_parse_command(pendulum_ctx_t *ctx, uint8_t *buf, uint16_t len)
-{
-    if (len < 3) return;
-
-    if (memcmp(buf, "001", 3) == 0) {
-        if (ctx->state == STATE_IDLE || ctx->state == STATE_CALIB_DONE) {
-            ctx->state = STATE_CALIBRATE;
-            ctx->calib_phase = 0;
-            ctx->calib.calibrated = 0;
-            ctx->limit_tripped = 0;
-            /* 正转（POSITIVE_DIR），平台右移，寻找右限位 */
-            step_motor_set_speed(&motor, CALIB_SPEED_RPM, POSITIVE_DIR);
-            printf("CALIB: start, seeking right limit...\r\n");
-        }
-    }
-    else if (memcmp(buf, "002", 3) == 0) {
-        if (ctx->calib.calibrated) {
-            ctx->state = STATE_MOVE_MID;
-            printf("SWING: moving to center...\r\n");
-        } else {
-            printf("ERR: not calibrated, send 001 first\r\n");
-        }
-    }
-}
-
-/* ============================================================ */
 /*                     状态机主循环入口                           */
 /* ============================================================ */
 
