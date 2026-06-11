@@ -36,6 +36,7 @@
 #include "../../device/include/uart.h"
 #include "mt6701.h"
 #include "angle_sensor.h"
+#include "pendulum.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -98,14 +99,17 @@ step_motor_t motor = {
 };
 
 // MT6701 磁编码器实例
-mt6701_t encoder = {
+mt6701_t encorder = {
 	.sensor = {
 		.hspi = &hspi1,
-		.cs_gpiox = MT6701_CSN_GPIO_Port,
-		.cs_gpio_pin = MT6701_CSN_Pin,
+		.cs_gpiox = GPIOA,
+		.cs_gpio_pin = GPIO_PIN_4,
 		.htim = &htim3,
 	},
 };
+
+/* 角度传感器实例（文件作用域，供 pendulum.c extern 引用）*/
+AngleSensor sensor1 = {0};
 
 // 自动调参实例（ISR 读写，需通过临界区保护多字节访问）
 volatile PID_AutoTune_t tuner;
@@ -115,6 +119,9 @@ volatile uint8_t auto_tune_active = 0; // 1=调参模式, 0=正常PID模式
 volatile float g_wave_target = 0;
 volatile float g_wave_actual = 0;
 volatile uint8_t g_wave_ready = 0;
+
+/* 起摆上下文 */
+pendulum_ctx_t pendulum = {0};
 
 /* USER CODE END 0 */
 
@@ -160,15 +167,6 @@ int main(void)
 	}
 
 	/* 初始化编码器 */
-	mt6701_t encorder = {
-		.sensor = {
-			.hspi = &hspi1,
-			.cs_gpiox = GPIOA,
-			.cs_gpio_pin = GPIO_PIN_4,
-			.htim = &htim3,
-		}
-	};
-
 	if (angle_sensor_init(&encorder) != DRV_OK){
 		Error_Handler();
 	}
@@ -178,8 +176,6 @@ int main(void)
 	float speed = 0.0f;
 
 	/* 初始化角度传感器 */
-	AngleSensor sensor1 = {0};
-
 	AngleSensor_Init(&sensor1,
 	                 &hadc1,
 	                 ADC_CHANNEL_0,
@@ -200,40 +196,48 @@ int main(void)
 
 	// 初始化串口命令测试
 	test_cmd_motor_init(&motor, &uart1);
-	// 测试普通电机
-	// test_step_motor_run_all(&motor);
-	// step_motor_set_speed(&motor, 500, POSITIVE_DIR);
 	/* USER CODE END 2 */
 
 	/* Infinite loop */
 	/* USER CODE BEGIN WHILE */
 	while (1){
 		/* USER CODE END WHILE */
-		test_cmd_motor_loop();
+// 		test_cmd_motor_loop();
+//
+// 		// 波形输出（主循环打印，不阻塞 ISR）
+// 		if (g_wave_ready){
+// 			CRITICAL_ENTER();
+// 			g_wave_ready = 0;
+// 			CRITICAL_EXIT();
+// #if (USE_MOTOR_PID_CONTROL)==1
+// 			// 调试：打印 PID 输出、编码器速度、误差、实际频率
+// 			extern volatile float g_pid_debug_output;
+// 			extern volatile float g_pid_debug_actual;
+// 			extern volatile float g_pid_debug_error;
+// 			extern volatile uint16_t g_pid_debug_freq;
+// 			printf("%.1f,%.1f\r\n",
+// 			       g_wave_target,
+// 			       (double)g_pid_debug_actual);
+//
+// #endif
+		// }
 
-		// 波形输出（主循环打印，不阻塞 ISR）
-		if (g_wave_ready){
-			CRITICAL_ENTER();
-			g_wave_ready = 0;
-			CRITICAL_EXIT();
-#if (USE_MOTOR_PID_CONTROL)==1
-			// 调试：打印 PID 输出、编码器速度、误差、实际频率
-			extern volatile float g_pid_debug_output;
-			extern volatile float g_pid_debug_actual;
-			extern volatile float g_pid_debug_error;
-			extern volatile uint16_t g_pid_debug_freq;
-			printf("%.1f,%.1f\r\n",
-			       g_wave_target,
-			       (double)g_pid_debug_actual);
-
-#endif
+		/* 读取传感器 */
+		// angle_sensor_read_total_angle(&encorder, &total_angle);
+		// angle_sensor_read_angle(&encorder, &angle);
+		// angle_sensor_read_speed(&encorder, &speed);
+		// anglesensor = AngleSensor_GetFilteredAngle(&sensor1);
+		//
+		/* 起摆串口命令解析 */
+		if (uart1.rx_done) {
+			uint8_t cmd_buf[64];
+			uint16_t cmd_len = 0;
+			cmd_len = uart_recv(&uart1, cmd_buf, sizeof(cmd_buf));
+			pendulum_parse_command(&pendulum, cmd_buf, cmd_len);
 		}
 
-		angle_sensor_read_total_angle(&encorder, &total_angle);
-		angle_sensor_read_angle(&encorder, &angle);
-		angle_sensor_read_speed(&encorder, &speed);
-
-		angle = AngleSensor_GetAngle(&sensor1);
+		/* 起摆状态机 */
+		pendulum_loop(&pendulum, total_angle, anglesensor);
 	}
 	/* USER CODE END 3 */
 }
