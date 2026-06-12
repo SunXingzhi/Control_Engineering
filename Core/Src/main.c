@@ -174,22 +174,9 @@ int main(void)
 		Error_Handler();
 	}
 
-	float total_angle = 0.0f;
-	float angle = 0.0f;
-	float speed = 0.0f;
+	// 注册电机到 TIM 回调表（TIM4 中断能找到 motor 实例）
+	// tim_register_motor(&htim4, &motor);
 
-	/* 初始化角度传感器 */
-	AngleSensor_Init(&sensor1,
-	                 &hadc1,
-	                 ADC_CHANNEL_0,
-	                 ADC_SAMPLETIME_55CYCLES_5,
-	                 0.09555f,
-	                 0.0f,
-	                 0.4f);
-
-	float anglesensor = 0.0f;
-
-	/* USER CODE END 2 */
 	// 初始化自动调参（默认关闭，通过串口命令启动）
 	PID_AutoTune_Init((PID_AutoTune_t*)&tuner,
 	                  PRESET_AUTOTUNE_AMPLITUDE,
@@ -199,51 +186,44 @@ int main(void)
 
 	// 初始化串口命令测试
 	test_cmd_motor_init(&motor, &uart1);
-	// 测试普通电机
-	// test_step_motor_run_all(&motor);
-	// step_motor_set_speed(&motor, 500, POSITIVE_DIR);
 	/* USER CODE END 2 */
 
-  /* Init scheduler */
-  osKernelInitialize();  /* Call init function for freertos objects (in cmsis_os2.c) */
-  MX_FREERTOS_Init();
+	/* Init scheduler */
+	osKernelInitialize(); /* Call init function for freertos objects (in cmsis_os2.c) */
+	MX_FREERTOS_Init();
 
-  /* Start scheduler */
-  osKernelStart();
+	/* Start scheduler */
+	osKernelStart();
 
-  /* We should never get here as control is now taken by the scheduler */
+	/* We should never get here as control is now taken by the scheduler */
 
-  /* Infinite loop */
-  /* USER CODE BEGIN WHILE */
+	/* Infinite loop */
+	/* USER CODE BEGIN WHILE */
 	while (1){
 		/* USER CODE END WHILE */
 
 		/* USER CODE BEGIN 3 */
-		test_cmd_motor_loop();
-
-		// 波形输出（主循环打印，不阻塞 ISR）
-		if (g_wave_ready){
-			g_wave_ready = 0;
-#if (USE_MOTOR_PID_CONTROL)==1
-			// 调试：打印 PID 输出、编码器速度、误差、实际频率
-			extern volatile float g_pid_debug_output;
-			extern volatile float g_pid_debug_actual;
-			extern volatile float g_pid_debug_error;
-			extern volatile uint16_t g_pid_debug_freq;
-			printf("%.1f,%.1f\r\n",
-				g_wave_target,
-				(double)g_pid_debug_actual);
-#else
-
-		/* 读取传感器 */
-		// angle_sensor_read_total_angle(&encorder, &total_angle);
-		// angle_sensor_read_angle(&encorder, &angle);
-		// angle_sensor_read_speed(&encorder, &speed);
-		// anglesensor = AngleSensor_GetFilteredAngle(&sensor1);
+		// 		test_cmd_motor_loop();
 		//
-
-		/* 起摆状态机 */
-		pendulum_loop(&pendulum, total_angle, anglesensor);
+		// 		// 波形输出（主循环打印，不阻塞 ISR）
+		// 		if (g_wave_ready){
+		// 			g_wave_ready = 0;
+		// #if (USE_MOTOR_PID_CONTROL)==1
+		// 			// 调试：打印 PID 输出、编码器速度、误差、实际频率
+		// 			extern volatile float g_pid_debug_output;
+		// 			extern volatile float g_pid_debug_actual;
+		// 			extern volatile float g_pid_debug_error;
+		// 			extern volatile uint16_t g_pid_debug_freq;
+		// 			printf("%.1f,%.1f,%.1f,%.1f\r\n",
+		// 			       g_wave_target,
+		// 			       (double)g_pid_debug_actual,
+		// 			       g_pid_debug_output,
+		// 			       g_pid_debug_error);
+		// #else
+		//
+		//
+		// #endif
+		// 		}
 	}
 	/* USER CODE END 3 */
 }
@@ -321,6 +301,7 @@ static void tim4_step_counter_isr(TIM_HandleTypeDef* htim)
 	}
 }
 
+
 /* USER CODE END 4 */
 
 /**
@@ -331,16 +312,15 @@ static void tim4_step_counter_isr(TIM_HandleTypeDef* htim)
   * @param  htim : TIM handle
   * @retval None
   */
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* htim)
 {
-  /* USER CODE BEGIN Callback 0 */
+	/* USER CODE BEGIN Callback 0 */
 
-  /* USER CODE END Callback 0 */
-  if (htim->Instance == TIM1)
-  {
-    HAL_IncTick();
-  }
-  /* USER CODE BEGIN Callback 1 */
+	/* USER CODE END Callback 0 */
+	if (htim->Instance == TIM1){
+		HAL_IncTick();
+	}
+	/* USER CODE BEGIN Callback 1 */
 	// TIM4 → 步数限位
 	if (htim->Instance == TIM4){
 		tim4_step_counter_isr(htim);
@@ -351,8 +331,8 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 		step_motor_t* motor = find_motor_by_tim(htim);
 		if (motor == NULL) return;
 		// 更新电机当前频率
-		motor->step_motor_information.current_frequency	= motor_speed_to_freq(g_dev->sensor.speed,
-											motor->step_motor_information.step_model);
+		motor->step_motor_information.current_frequency = motor_speed_to_freq(g_dev->sensor.speed,
+			motor->step_motor_information.step_model);
 #if USE_MOTOR_PID_CONTROL==1
 		pid_control_tick(find_motor_by_tim(htim));
 #endif
@@ -370,7 +350,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 			g_wave_ready = 1;
 		}
 	}
-  /* USER CODE END Callback 1 */
+	/* USER CODE END Callback 1 */
 }
 
 /**
@@ -383,6 +363,7 @@ void Error_Handler(void)
 	/* User can add his own implementation to report the HAL error return state */
 	CRITICAL_ENTER();
 	while (1){
+		// 串口发送
 	}
 	/* USER CODE END Error_Handler_Debug */
 }

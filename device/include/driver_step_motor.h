@@ -42,18 +42,17 @@
 	#endif
 #endif
 
+// 非阻塞加速斜坡状态机
+typedef enum ramp_state {
+	RAMP_IDLE = 0,
+	RAMP_ACCEL,
+	RAMP_HOLD,
+	RAMP_DECEL,
+	RAMP_STEP,
+	RAMP_DONE
+} ramp_state_t;
 
 #if !defined(USE_FREERTOS)
-	// 非阻塞加速斜坡状态机
-	typedef enum ramp_state {
-		RAMP_IDLE = 0,
-		RAMP_ACCEL,
-		RAMP_HOLD,
-		RAMP_DECEL,
-		RAMP_STEP,
-		RAMP_DONE
-	} ramp_state_t;
-
 	typedef struct motor_ramp {
 		ramp_state_t state;
 		uint32_t freq_current;

@@ -104,15 +104,15 @@ void MX_FREERTOS_Init(void) {
   /* USER CODE END Init */
 
   /* USER CODE BEGIN RTOS_MUTEX */
-  /* add mutexes, ... */
+	/* add mutexes, ... */
   /* USER CODE END RTOS_MUTEX */
 
   /* USER CODE BEGIN RTOS_SEMAPHORES */
-  /* add semaphores, ... */
+	/* add semaphores, ... */
   /* USER CODE END RTOS_SEMAPHORES */
 
   /* USER CODE BEGIN RTOS_TIMERS */
-  /* start timers, add new ones, ... */
+	/* start timers, add new ones, ... */
   /* USER CODE END RTOS_TIMERS */
 
   /* Create the queue(s) */
@@ -120,7 +120,7 @@ void MX_FREERTOS_Init(void) {
   usart_recv_queueHandle = osMessageQueueNew (64, sizeof(uint8_t), &usart_recv_queue_attributes);
 
   /* USER CODE BEGIN RTOS_QUEUES */
-  /* add queues, ... */
+	/* add queues, ... */
   /* USER CODE END RTOS_QUEUES */
 
   /* Create the thread(s) */
@@ -137,11 +137,11 @@ void MX_FREERTOS_Init(void) {
   sensor_data_tasHandle = osThreadNew(sensor_data_updater_func, NULL, &sensor_data_tas_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
-  /* add threads, ... */
+	/* add threads, ... */
   /* USER CODE END RTOS_THREADS */
 
   /* USER CODE BEGIN RTOS_EVENTS */
-  /* add events, ... */
+	/* add events, ... */
   /* USER CODE END RTOS_EVENTS */
 
 }
@@ -156,11 +156,10 @@ void MX_FREERTOS_Init(void) {
 void usart_send_task_func(void *argument)
 {
   /* USER CODE BEGIN usart_send_task_func */
-  /* Infinite loop */
-  for(;;)
-  {
-    osDelay(1);
-  }
+	/* Infinite loop */
+	for (;;){
+		osDelay(1);
+	}
   /* USER CODE END usart_send_task_func */
 }
 
@@ -174,11 +173,11 @@ void usart_send_task_func(void *argument)
 void usart_recv_task_func(void *argument)
 {
   /* USER CODE BEGIN usart_recv_task_func */
-  /* Infinite loop */
-  for(;;)
-  {
-    osDelay(1);
-  }
+	/* Infinite loop */
+	for (;;){
+
+		osDelay(1);
+	}
   /* USER CODE END usart_recv_task_func */
 }
 
@@ -192,11 +191,10 @@ void usart_recv_task_func(void *argument)
 void controller_task_func(void *argument)
 {
   /* USER CODE BEGIN controller_task_func */
-  /* Infinite loop */
-  for(;;)
-  {
-    osDelay(1);
-  }
+	/* Infinite loop */
+	for (;;){
+		osDelay(1);
+	}
   /* USER CODE END controller_task_func */
 }
 
@@ -210,11 +208,10 @@ void controller_task_func(void *argument)
 void sensor_data_updater_func(void *argument)
 {
   /* USER CODE BEGIN sensor_data_updater_func */
-  /* Infinite loop */
-  for(;;)
-  {
-    osDelay(1);
-  }
+	/* Infinite loop */
+	for (;;){
+		osDelay(1);
+	}
   /* USER CODE END sensor_data_updater_func */
 }
 

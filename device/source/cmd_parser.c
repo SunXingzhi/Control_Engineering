@@ -317,9 +317,7 @@ static void execute_cmd(const cmd_t* cmd)
 	}
 	// 自动调参开始命令
 	case CMD_AUTOTUNE_START: {
-		// 停止电机，重置调参器，启动调参模式
 		step_motor_stop(s_motor);
-		// 临界区内先 Reset 再置位，防止 ISR 在 Reset 完成前读到 active=1
 		CRITICAL_ENTER();
 		PID_AutoTune_Reset((PID_AutoTune_t*)&tuner);
 		auto_tune_active = 1;
@@ -328,9 +326,8 @@ static void execute_cmd(const cmd_t* cmd)
 		SEND_STR("relay=300rpm hyst=50rpm target=200rpm cycles=8\r\n");
 		break;
 	}
-	// 自动调参获取结果命令
+	// 自动调参查询结果
 	case CMD_AUTOTUNE_RESULT: {
-		// 临界区保护，防止 ISR 正在更新 tuner 时主循环读到半写入状态
 		CRITICAL_ENTER();
 		uint8_t done = PID_AutoTune_IsDone((PID_AutoTune_t*)&tuner);
 		const autotune_result_t* r = done ? PID_AutoTune_GetResult((PID_AutoTune_t*)&tuner) : NULL;
@@ -370,14 +367,14 @@ static void execute_cmd(const cmd_t* cmd)
 		s_motor->motor_pid.Kd = kd;
 		auto_tune_active = 0;
 		extern volatile float g_wave_target;
-		g_wave_target	= target;
+		g_wave_target = target;
 		CRITICAL_EXIT();
 
 		// 启动电机
 		step_motor_start(s_motor);
 		step_motor_set_speed(s_motor,
-						target,
-						target>0? POSITIVE_DIR: NEGATIVE_DIR);
+		                     target,
+		                     target > 0 ? POSITIVE_DIR : NEGATIVE_DIR);
 
 		char buf[96];
 		snprintf(buf, sizeof(buf),
