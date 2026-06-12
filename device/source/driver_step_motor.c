@@ -707,20 +707,6 @@ void pid_apply_output(step_motor_t* motor, float output)
 	}
 }
 
-/**
- * @brief  更新波形共享数据（主循环负责打印）
- */
-static void wave_data_update(float target, float actual)
-{
-	static uint8_t tick = 0;
-	if (++tick >= 5){
-		tick = 0;
-		g_wave_target = target;
-		g_wave_actual = actual;
-		g_wave_ready = 1;
-	}
-}
-
 // ---- PID 调试共享变量（ISR 写，主循环读）----
 volatile float g_pid_debug_output = 0;    // PID 计算输出
 volatile float g_pid_debug_actual = 0;    // 编码器实际速度

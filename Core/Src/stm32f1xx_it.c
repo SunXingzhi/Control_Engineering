@@ -67,6 +67,8 @@ extern DMA_HandleTypeDef hdma_spi1_tx;
 extern TIM_HandleTypeDef htim3;
 extern TIM_HandleTypeDef htim4;
 extern UART_HandleTypeDef huart1;
+extern TIM_HandleTypeDef htim1;
+
 /* USER CODE BEGIN EV */
 extern PID_AutoTune_t tuner;
 
@@ -150,19 +152,6 @@ void UsageFault_Handler(void)
 }
 
 /**
-  * @brief This function handles System service call via SWI instruction.
-  */
-void SVC_Handler(void)
-{
-  /* USER CODE BEGIN SVCall_IRQn 0 */
-
-  /* USER CODE END SVCall_IRQn 0 */
-  /* USER CODE BEGIN SVCall_IRQn 1 */
-
-  /* USER CODE END SVCall_IRQn 1 */
-}
-
-/**
   * @brief This function handles Debug monitor.
   */
 void DebugMon_Handler(void)
@@ -173,33 +162,6 @@ void DebugMon_Handler(void)
   /* USER CODE BEGIN DebugMonitor_IRQn 1 */
 
   /* USER CODE END DebugMonitor_IRQn 1 */
-}
-
-/**
-  * @brief This function handles Pendable request for system service.
-  */
-void PendSV_Handler(void)
-{
-  /* USER CODE BEGIN PendSV_IRQn 0 */
-
-  /* USER CODE END PendSV_IRQn 0 */
-  /* USER CODE BEGIN PendSV_IRQn 1 */
-
-  /* USER CODE END PendSV_IRQn 1 */
-}
-
-/**
-  * @brief This function handles System tick timer.
-  */
-void SysTick_Handler(void)
-{
-  /* USER CODE BEGIN SysTick_IRQn 0 */
-
-  /* USER CODE END SysTick_IRQn 0 */
-  HAL_IncTick();
-  /* USER CODE BEGIN SysTick_IRQn 1 */
-	HAL_SYSTICK_Callback();
-  /* USER CODE END SysTick_IRQn 1 */
 }
 
 /******************************************************************************/
@@ -235,6 +197,20 @@ void DMA1_Channel3_IRQHandler(void)
   /* USER CODE BEGIN DMA1_Channel3_IRQn 1 */
 
   /* USER CODE END DMA1_Channel3_IRQn 1 */
+}
+
+/**
+  * @brief This function handles TIM1 update interrupt.
+  */
+void TIM1_UP_IRQHandler(void)
+{
+  /* USER CODE BEGIN TIM1_UP_IRQn 0 */
+
+  /* USER CODE END TIM1_UP_IRQn 0 */
+  HAL_TIM_IRQHandler(&htim1);
+  /* USER CODE BEGIN TIM1_UP_IRQn 1 */
+
+  /* USER CODE END TIM1_UP_IRQn 1 */
 }
 
 /**
@@ -296,86 +272,6 @@ void EXTI15_10_IRQHandler(void)
 
 /* USER CODE BEGIN 1 */
 extern mt6701_t encoder;
-static tim_callback_entry_t callback_table[8] = {0};
-
-extern mt6701_t* g_dev;
-
-
-/* ======================== 注册 / 查找 ======================== */
-
-void tim_register_motor(TIM_HandleTypeDef* htim, step_motor_t* motor)
-{
-	uint8_t index = TIM_TO_TABLE_INDEX(htim);
-	if (index != TIM_TABLE_ERROR_INDEX){
-		callback_table[index].motor = motor;
-	}
-}
-
-static step_motor_t* find_motor_by_tim(TIM_HandleTypeDef* htim)
-{
-	uint8_t index = TIM_TO_TABLE_INDEX(htim);
-	return callback_table[index].motor;
-}
-
-/* ======================== TIM4: 步数限位 ======================== */
-
-/**
- * @brief  TIM4 更新中断处理（步数限位计数）
- * @note   仅在 move_angle 设置 step_remaining 后才计数
- */
-static void tim4_step_counter_isr(TIM_HandleTypeDef* htim)
-{
-	step_motor_t* motor = find_motor_by_tim(htim);
-	if (motor == NULL) return;
-
-	step_motor_information_t* info = &motor->step_motor_information;
-	if (info->step_remaining > 0){
-		info->step_remaining--;
-		if (info->step_remaining == 0){
-			__HAL_TIM_DISABLE_IT(htim, TIM_IT_UPDATE);
-			step_motor_pwm_off(motor);
-		}
-	}
-}
-
-/* ======================== HAL 回调入口 ======================== */
-
-/**
- * @brief  TIM 更新中断回调（由 HAL_TIM_IRQHandler 调用）
- * @param  htim: 触发中断的定时器句柄
- */
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* htim)
-{
-	// TIM4 → 步数限位
-	if (htim->Instance == TIM4){
-		tim4_step_counter_isr(htim);
-	}
-	// TIM3 → 编码器采样(周期1ms) + PID控制(周期2ms)
-	else if (htim->Instance == TIM3){
-		encoder_update_speed();
-		step_motor_t* motor = find_motor_by_tim(htim);
-		if (motor == NULL) return;
-		// 更新电机当前频率
-		motor->step_motor_information.current_frequency	= motor_speed_to_freq(g_dev->sensor.speed,
-											motor->step_motor_information.step_model);
-#if USE_MOTOR_PID_CONTROL==1
-		pid_control_tick(find_motor_by_tim(htim));
-#endif
-		// 波形输出：打印目标值和实际值
-		extern volatile uint8_t g_wave_ready;
-		extern volatile float g_wave_target;
-		extern volatile float g_wave_actual;
-		extern volatile uint8_t auto_tune_active;
-		static volatile uint8_t tick = 0;
-		if (++tick >= 5){
-			tick = 0;
-			extern PID_AutoTune_t tuner;
-			// g_wave_target = auto_tune_active ? tuner.setpoint : motor->motor_pid.Target;
-			g_wave_actual = g_dev->sensor.speed;
-			g_wave_ready = 1;
-		}
-	}
-}
 
 #if !defined(USE_FREE_RTOS)
 	#if USE_MOTOR_PID_CONTROL==0
