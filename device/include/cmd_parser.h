@@ -25,6 +25,7 @@
 #include "device.h"
 #include "driver_step_motor.h"
 #include "uart.h"
+#include "pendulum.h"
 
 /** 命令 ID */
 typedef enum CMD_ID {
@@ -38,6 +39,8 @@ typedef enum CMD_ID {
 	CMD_AUTOTUNE_RESULT,	// R
 	CMD_PID_SETTING,	// X
 	CMD_HELP,		// H
+	CMD_PENDULUM_CALIB,		// C:001(校位)
+	CMD_PENDULUM_SWING,		// C:002(起摆)
 } cmd_id_t;
 
 /** 解析后的命令结构 */
@@ -56,6 +59,8 @@ typedef struct CMD {
  * @param  motor: 电机实例指针
  */
 void cmd_parser_init(uart_base_t* uart, step_motor_t* motor);
+
+void cmd_parser_set_pendulum(pendulum_ctx_t* ctx);
 
 /**
  * @brief  命令处理主循环（在 main while(1) 中调用）
