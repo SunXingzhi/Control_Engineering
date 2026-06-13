@@ -196,18 +196,19 @@ device_err_t step_motor_move_angle(step_motor_t* motor, motor_direction_t dir, f
 device_err_t step_motor_set_pulse_freq(step_motor_t* motor, uint16_t pulse_freq_hz);
 device_err_t step_motor_set_direction(step_motor_t* motor, motor_direction_t dir);
 void         step_motor_pwm_off(step_motor_t* motor);
-
-#if (USE_MOTOR_PID_CONTROL==0)
-	void ramp_step_motor_set(motor_ramp_t* ramp,
-			uint32_t current_freq,
-			uint32_t target_freq,
-			uint16_t step_number,
-			uint32_t hold_ms, ramp_state_t state);
-	device_err_t ramp_step_motor_tick(motor_ramp_t* ramp, step_motor_t* motor);
-#elif (USE_MOTOR_PID_CONTROL==1)
-float pid_output_clamp(float raw);
-void pid_apply_output(step_motor_t* motor, float output);
-void pid_control_tick(step_motor_t* motor);
+#if !defined(USE_FREERTOS)
+	#if (USE_MOTOR_PID_CONTROL==0)
+		void ramp_step_motor_set(motor_ramp_t* ramp,
+				uint32_t current_freq,
+				uint32_t target_freq,
+				uint16_t step_number,
+				uint32_t hold_ms, ramp_state_t state);
+		device_err_t ramp_step_motor_tick(motor_ramp_t* ramp, step_motor_t* motor);
+	#elif (USE_MOTOR_PID_CONTROL==1)
+	float pid_output_clamp(float raw);
+	void pid_apply_output(step_motor_t* motor, float output);
+	void pid_control_tick(step_motor_t* motor);
+	#endif
 #endif
 
 #endif //TWO_LINK_DRIVER_STEP_MOTOR_H

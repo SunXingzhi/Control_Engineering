@@ -154,6 +154,7 @@ void HAL_SPI_ErrorCallback(SPI_HandleTypeDef* hspi)
 	HAL_SPI_TransmitReceive_DMA(s->hspi, dev->tx_buf, dev->rx_buf, 3);
 }
 
+
 /* ======================== TIM3: 编码器采样 ======================== */
 /**
  * @brief  编码器速度更新（TIM3 中断，1ms 周期）
@@ -173,16 +174,16 @@ void encoder_update_speed(void)
 	}
 
 	// 每隔 SPEED_CALC_DIV 次 (5ms) 计算一次速度，增大角度差以减少量化噪声
-	#define SPEED_CALC_DIV  5
+
 	static uint8_t calc_div = 0;
-	if (++calc_div < SPEED_CALC_DIV) return;
+	if (++calc_div < SPEED_CALC_DIV_TICKS) return;
 	calc_div = 0;
 
 	float diff = cycle_diff(s->angle - s->angle_last, MT6701_ANGLE_MAX);
 	s->angle_last = s->angle;
 
 	// 5ms 累积的角速度 → 单个采样噪声降低为 1/5
-	float omega_raw = diff * speed_calc_freq / SPEED_CALC_DIV;  // rad/s
+	float omega_raw = diff * speed_calc_freq / SPEED_CALC_DIV_TICKS;  // rad/s
 	float speed_raw = omega_to_rpm(omega_raw);                  // rpm
 
 	// 一阶低通: y = alpha*x + (1-alpha)*y_prev

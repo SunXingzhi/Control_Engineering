@@ -6,8 +6,7 @@
 #define FLOAT_COMPARATIVE_ACCURACY	4
 #define PI				3.1415926f
 
-// 程序配置相关
-#define	DEBUG	1	// 是否进入DEBUG模式
+
 
 // 设备处理类
 typedef enum device_err{
@@ -20,11 +19,6 @@ typedef enum device_err{
 	DRV_ERR_IO,
 } device_err_t;
 
-// 电机相关配置信息(比如是否使用rtos, 定时器等等)
-#define USE_MOTOR_PID_CONTROL	0
-// #define USE_FREERTOS			// 判断系统是否使用FreeRTOS
-
-
 // 电机步进方式枚举（多处共用，放在公共头文件避免循环依赖）
 typedef enum motor_step_model{
 	DEFAULT_STEP = 1,
@@ -35,6 +29,25 @@ typedef enum motor_step_model{
 	ONE_SIXTEENTH_STEP = 16
 } motor_step_model_t;
 
+// ==================================== 程序配置相关 =======================================
+#define	DEBUG	1	// 是否进入DEBUG模式
+
+// 电机相关配置信息(比如是否使用rtos, 定时器等等)
+#define USE_MOTOR_PID_CONTROL	0
+#define USE_FREERTOS			// 判断系统是否使用FreeRTOS
+#define USE_CMSIS_V2_OS			/// 是否使用CMSIS v2 兼容层
+#if defined(USE_FREERTOS)
+// 传感器数据(角度传感器(两个), 磁编码器MT6701)
+typedef struct {
+	float theta1;         // 一级摆角度 (ADC)
+	float theta2;         // 二级摆角度 (ADC)
+	float theta1_dot;     // 一级摆角速度 (差分)
+	float theta2_dot;     // 二级摆角速度 (差分)
+	float x_cart;         // 小车位置 (编码器累计角度)
+	float x_dot;          // 小车速度 (编码器速度)
+} sensor_state_t;
+
+#endif
 
 // 根据是否加入OS决定进入临界区的API使用
 #ifdef USE_FREERTOS

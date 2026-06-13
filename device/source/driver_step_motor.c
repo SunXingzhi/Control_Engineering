@@ -30,6 +30,7 @@ extern TIM_HandleTypeDef htim4;
 #endif
 
 // 内部函数定义
+#if !defined(USE_FREERTOS)
 #if USE_MOTOR_PID_CONTROL==0
 	static device_err_t ramp_step_motor_init(motor_ramp_t* ramp,
 									uint32_t target_freq,
@@ -37,6 +38,7 @@ extern TIM_HandleTypeDef htim4;
 									uint32_t hold_ms);
 	static device_err_t ramp_step_motor_start(motor_ramp_t* ramp, step_motor_t* motor);
 	device_err_t ramp_step_motor_tick(motor_ramp_t* ramp, step_motor_t* motor);
+#endif
 #endif
 
 void step_motor_pwm_off(step_motor_t* motor);
@@ -163,11 +165,13 @@ device_err_t step_motor_init(step_motor_t* motor)
 				MOTOR_PID_OUTPUT_MAX(motor->step_motor_information.step_model),
 				MOTOR_PID_OUTPUT_MIN(motor->step_motor_information.step_model)
 			);
-
-#elif (USE_MOTOR_PID_CONTROL==0)
+#if !defined(USE_FREERTOS)
+#if (USE_MOTOR_PID_CONTROL==0)
 	// 初始化斜坡参数
 	ramp_step_motor_init(&motor->ramp, 0, MOTOR_STEP_LENGTH_FREQUENCY_HZ, 0);
 
+#endif
+#endif
 #endif
 
 	// 注册实例, 不注册会导致TIM采样失效.
@@ -286,7 +290,7 @@ device_err_t step_motor_stop(step_motor_t* motor)
 	motor->step_motor_information.dir		= STOP_DIR;
 	motor->step_motor_information.dir_state		= DIR_NORMAL;
 	motor->step_motor_information.step_remaining	= 0;
-
+#if !defined(USE_FREERTOS)
 #if USE_MOTOR_PID_CONTROL==0
 	// 清除斜坡状态机，防止 SysTick 回调继续用旧状态操作定时器
 	motor->ramp.state        = RAMP_IDLE;
@@ -296,6 +300,7 @@ device_err_t step_motor_stop(step_motor_t* motor)
 #elif USE_MOTOR_PID_CONTROL==1
 	// 重置限速器状态
 	clamp_last_output = 0.0f;
+#endif
 #endif
 
 	return DRV_OK;
@@ -348,7 +353,7 @@ device_err_t step_motor_set_speed(step_motor_t* motor, const float speed, motor_
 	if (target_freq == 0) return DRV_ERR_PARAM;
 	// 如果频率过大, 设置为支持的电机最大频率
 	if (target_freq>MAX_PWM_FREQUENCY_HZ) target_freq	= MAX_PWM_FREQUENCY_HZ;
-
+#if !defined(USE_FREERTOS)
 #if USE_MOTOR_PID_CONTROL==0
 	// 如果不使用闭环控制, 则需要设置
 	// 配置斜坡参数（ACCEL/DECEL 判断交给 start 根据 ramp 内部 freq 完成.
@@ -381,6 +386,8 @@ device_err_t step_motor_set_speed(step_motor_t* motor, const float speed, motor_
 	step_motor_set_pulse_freq(motor, start_freq);
 	step_motor_start(motor);
 #endif
+#endif
+
 	return  DRV_OK;
 }
 
@@ -503,7 +510,7 @@ void step_motor_pwm_off(step_motor_t* motor)
 	motor->step_motor_information.dir_state	= DIR_NORMAL;
 }
 
-
+#if !defined(USE_FREERTOS)
 #if USE_MOTOR_PID_CONTROL==0
 // ======================== 非阻塞加速斜坡（中断驱动, 步进电机驱动内部使用） ========================
 /**
@@ -811,4 +818,5 @@ void pid_control_tick(step_motor_t* motor)
 	pid_apply_output(motor, output);
 
 }
+#endif
 #endif

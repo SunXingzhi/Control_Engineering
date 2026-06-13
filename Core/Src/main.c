@@ -59,21 +59,19 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-
-static uart_base_t uart1 = {
-	.huart = &huart1,
-	.rx_buf_size = UART_RX_BUF_SIZE,
-	.rx_buf = {0},
-};
+uart_base_t uart1;
 static tim_callback_entry_t callback_table[8] = {0};
+
 extern mt6701_t* g_dev;
+
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 void MX_FREERTOS_Init(void);
 /* USER CODE BEGIN PFP */
-
+void BSP_init(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -113,7 +111,7 @@ mt6701_t encoder = {
 
 /* 角度传感器实例（文件作用域，供 pendulum.c extern 引用）*/
 AngleSensor sensor1 = {0};
-
+AngleSensor sensor2 = {0};
 // 自动调参实例（ISR 读写，需通过临界区保护多字节访问）
 volatile PID_AutoTune_t tuner;
 volatile uint8_t auto_tune_active = 0; // 1=调参模式, 0=正常PID模式
@@ -134,37 +132,111 @@ pendulum_ctx_t pendulum = {0};
   */
 int main(void)
 {
-	/* USER CODE BEGIN 1 */
 
-	/* USER CODE END 1 */
+  /* USER CODE BEGIN 1 */
 
-	/* MCU Configuration--------------------------------------------------------*/
+  /* USER CODE END 1 */
 
-	/* Reset of all peripherals, Initializes the Flash interface and the Systick. */
-	HAL_Init();
+  /* MCU Configuration--------------------------------------------------------*/
 
-	/* USER CODE BEGIN Init */
+  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
+  HAL_Init();
 
-	/* USER CODE END Init */
+  /* USER CODE BEGIN Init */
 
-	/* Configure the system clock */
-	SystemClock_Config();
+  /* USER CODE END Init */
 
-	/* USER CODE BEGIN SysInit */
+  /* Configure the system clock */
+  SystemClock_Config();
 
-	/* USER CODE END SysInit */
+  /* USER CODE BEGIN SysInit */
 
-	/* Initialize all configured peripherals */
-	MX_GPIO_Init();
-	MX_DMA_Init();
-	MX_TIM4_Init();
-	MX_USART1_UART_Init();
-	MX_SPI1_Init();
-	MX_TIM3_Init();
-	MX_ADC1_Init();
-	/* USER CODE BEGIN 2 */
+  /* USER CODE END SysInit */
+
+  /* Initialize all configured peripherals */
+  MX_GPIO_Init();
+  MX_DMA_Init();
+  MX_TIM4_Init();
+  MX_USART1_UART_Init();
+  MX_SPI1_Init();
+  MX_TIM3_Init();
+  MX_ADC1_Init();
+  /* USER CODE BEGIN 2 */
+	BSP_init();	// 所有驱动初始化
+  /* USER CODE END 2 */
+
+  /* Init scheduler */
+  osKernelInitialize();  /* Call init function for freertos objects (in cmsis_os2.c) */
+  MX_FREERTOS_Init();
+
+  /* Start scheduler */
+  osKernelStart();
+
+  /* We should never get here as control is now taken by the scheduler */
+
+  /* Infinite loop */
+  /* USER CODE BEGIN WHILE */
+	while (1){
+    /* USER CODE END WHILE */
+
+    /* USER CODE BEGIN 3 */
+	}
+  /* USER CODE END 3 */
+}
+
+/**
+  * @brief System Clock Configuration
+  * @retval None
+  */
+void SystemClock_Config(void)
+{
+  RCC_OscInitTypeDef RCC_OscInitStruct = {0};
+  RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
+  RCC_PeriphCLKInitTypeDef PeriphClkInit = {0};
+
+  /** Initializes the RCC Oscillators according to the specified parameters
+  * in the RCC_OscInitTypeDef structure.
+  */
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
+  RCC_OscInitStruct.HSEState = RCC_HSE_ON;
+  RCC_OscInitStruct.HSEPredivValue = RCC_HSE_PREDIV_DIV1;
+  RCC_OscInitStruct.HSIState = RCC_HSI_ON;
+  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
+  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
+  RCC_OscInitStruct.PLL.PLLMUL = RCC_PLL_MUL9;
+  if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Initializes the CPU, AHB and APB buses clocks
+  */
+  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
+                              |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
+  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
+  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
+
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_ADC;
+  PeriphClkInit.AdcClockSelection = RCC_ADCPCLK2_DIV8;
+  if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
+  {
+    Error_Handler();
+  }
+}
+
+/* USER CODE BEGIN 4 */
+void BSP_init(void)
+{
+	// 串口初始化
+	uart1.huart = &huart1;
+	uart1.rx_buf_size = UART_RX_BUF_SIZE;
 	uart_init(&uart1);
-
 	if (step_motor_init(&motor) != DRV_OK){
 		Error_Handler();
 	}
@@ -174,104 +246,31 @@ int main(void)
 		Error_Handler();
 	}
 
+	// 初始化角度传感器（ADC 通道、校准系数需要根据实际硬件标定）
+	// sensor1: 一级摆，ADC1 通道 0
+	AngleSensor_Init(&sensor1, &hadc1, ADC_CHANNEL_0,
+			 ADC_SAMPLETIME_55CYCLES_5,
+			 0.001f, 0.0f,   // k, b: ADC值→角度的线性系数（需标定）
+			 0.3f);          // 滤波系数
+	// sensor2: 二级摆（如果有的话，取消注释并配置正确的 ADC 通道）
+	AngleSensor_Init(&sensor2, &hadc1, ADC_CHANNEL_1,
+			 ADC_SAMPLETIME_55CYCLES_5,
+			 0.001f, 0.0f,
+			 0.3f);
+
 	// 注册电机到 TIM 回调表（TIM4 中断能找到 motor 实例）
 	// tim_register_motor(&htim4, &motor);
 
 	// 初始化自动调参（默认关闭，通过串口命令启动）
 	PID_AutoTune_Init((PID_AutoTune_t*)&tuner,
-	                  PRESET_AUTOTUNE_AMPLITUDE,
-	                  PRESET_AUTOTUNE_HYSTERESIS,
-	                  PRESET_AUTOTUNE_SETPOINT,
-	                  PRESET_AUTOTUNE_CYCLES);
+			  PRESET_AUTOTUNE_AMPLITUDE,
+			  PRESET_AUTOTUNE_HYSTERESIS,
+			  PRESET_AUTOTUNE_SETPOINT,
+			  PRESET_AUTOTUNE_CYCLES);
 
 	// 初始化串口命令测试
 	test_cmd_motor_init(&motor, &uart1);
-	/* USER CODE END 2 */
-
-	/* Init scheduler */
-	osKernelInitialize(); /* Call init function for freertos objects (in cmsis_os2.c) */
-	MX_FREERTOS_Init();
-
-	/* Start scheduler */
-	osKernelStart();
-
-	/* We should never get here as control is now taken by the scheduler */
-
-	/* Infinite loop */
-	/* USER CODE BEGIN WHILE */
-	while (1){
-		/* USER CODE END WHILE */
-
-		/* USER CODE BEGIN 3 */
-		// 		test_cmd_motor_loop();
-		//
-		// 		// 波形输出（主循环打印，不阻塞 ISR）
-		// 		if (g_wave_ready){
-		// 			g_wave_ready = 0;
-		// #if (USE_MOTOR_PID_CONTROL)==1
-		// 			// 调试：打印 PID 输出、编码器速度、误差、实际频率
-		// 			extern volatile float g_pid_debug_output;
-		// 			extern volatile float g_pid_debug_actual;
-		// 			extern volatile float g_pid_debug_error;
-		// 			extern volatile uint16_t g_pid_debug_freq;
-		// 			printf("%.1f,%.1f,%.1f,%.1f\r\n",
-		// 			       g_wave_target,
-		// 			       (double)g_pid_debug_actual,
-		// 			       g_pid_debug_output,
-		// 			       g_pid_debug_error);
-		// #else
-		//
-		//
-		// #endif
-		// 		}
-	}
-	/* USER CODE END 3 */
 }
-
-/**
-  * @brief System Clock Configuration
-  * @retval None
-  */
-void SystemClock_Config(void)
-{
-	RCC_OscInitTypeDef RCC_OscInitStruct = {0};
-	RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
-	RCC_PeriphCLKInitTypeDef PeriphClkInit = {0};
-
-	/** Initializes the RCC Oscillators according to the specified parameters
-	* in the RCC_OscInitTypeDef structure.
-	*/
-	RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
-	RCC_OscInitStruct.HSEState = RCC_HSE_ON;
-	RCC_OscInitStruct.HSEPredivValue = RCC_HSE_PREDIV_DIV1;
-	RCC_OscInitStruct.HSIState = RCC_HSI_ON;
-	RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
-	RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
-	RCC_OscInitStruct.PLL.PLLMUL = RCC_PLL_MUL9;
-	if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK){
-		Error_Handler();
-	}
-
-	/** Initializes the CPU, AHB and APB buses clocks
-	*/
-	RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_SYSCLK
-		| RCC_CLOCKTYPE_PCLK1 | RCC_CLOCKTYPE_PCLK2;
-	RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
-	RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
-	RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
-	RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
-
-	if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_2) != HAL_OK){
-		Error_Handler();
-	}
-	PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_ADC;
-	PeriphClkInit.AdcClockSelection = RCC_ADCPCLK2_DIV8;
-	if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK){
-		Error_Handler();
-	}
-}
-
-/* USER CODE BEGIN 4 */
 void tim_register_motor(TIM_HandleTypeDef* htim, step_motor_t* motor)
 {
 	uint8_t index = TIM_TO_TABLE_INDEX(htim);
@@ -312,19 +311,21 @@ static void tim4_step_counter_isr(TIM_HandleTypeDef* htim)
   * @param  htim : TIM handle
   * @retval None
   */
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* htim)
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
-	/* USER CODE BEGIN Callback 0 */
+  /* USER CODE BEGIN Callback 0 */
 
-	/* USER CODE END Callback 0 */
-	if (htim->Instance == TIM1){
-		HAL_IncTick();
-	}
-	/* USER CODE BEGIN Callback 1 */
+  /* USER CODE END Callback 0 */
+  if (htim->Instance == TIM1)
+  {
+    HAL_IncTick();
+  }
+  /* USER CODE BEGIN Callback 1 */
 	// TIM4 → 步数限位
 	if (htim->Instance == TIM4){
 		tim4_step_counter_isr(htim);
 	}
+
 	// TIM3 → 编码器采样(周期1ms) + PID控制(周期2ms)
 	else if (htim->Instance == TIM3){
 		encoder_update_speed();
@@ -350,7 +351,11 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* htim)
 			g_wave_ready = 1;
 		}
 	}
-	/* USER CODE END Callback 1 */
+
+
+
+
+  /* USER CODE END Callback 1 */
 }
 
 /**
@@ -359,13 +364,13 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* htim)
   */
 void Error_Handler(void)
 {
-	/* USER CODE BEGIN Error_Handler_Debug */
+  /* USER CODE BEGIN Error_Handler_Debug */
 	/* User can add his own implementation to report the HAL error return state */
 	CRITICAL_ENTER();
 	while (1){
 		// 串口发送
 	}
-	/* USER CODE END Error_Handler_Debug */
+  /* USER CODE END Error_Handler_Debug */
 }
 #ifdef USE_FULL_ASSERT
 /**
@@ -375,11 +380,11 @@ void Error_Handler(void)
   * @param  line: assert_param error line source number
   * @retval None
   */
-void assert_failed(uint8_t* file, uint32_t line)
+void assert_failed(uint8_t *file, uint32_t line)
 {
-	/* USER CODE BEGIN 6 */
+  /* USER CODE BEGIN 6 */
 	/* User can add his own implementation to report the file name and line number,
 	   ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
-	/* USER CODE END 6 */
+  /* USER CODE END 6 */
 }
 #endif /* USE_FULL_ASSERT */

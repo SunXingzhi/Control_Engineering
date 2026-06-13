@@ -10,13 +10,15 @@
 #include <stdio.h>
 
 /* 模块内部状态 */
-static uart_base_t*		s_uart  = NULL;
-static step_motor_t*	s_motor = NULL;
-static pendulum_ctx_t*	s_pendulum = NULL;
+static uart_base_t*   s_uart  = NULL;
+static step_motor_t*  s_motor = NULL;
 
 /* 自动调参实例（定义在 main.c 中） */
 extern volatile PID_AutoTune_t tuner;
 extern volatile uint8_t auto_tune_active;
+#if defined(USE_FREERTOS)
+extern osMessageQueueId_t usart_recv_queueHandle;
+#endif
 
 /* 发送字符串的便捷宏 */
 #define SEND_STR(s)   uart_send(s_uart, (uint8_t*)(s), strlen(s))
@@ -41,28 +43,82 @@ void cmd_parser_init(uart_base_t* uart, step_motor_t* motor)
 	s_motor = motor;
 }
 
-void cmd_parser_set_pendulum(pendulum_ctx_t* ctx)
-{
-	s_pendulum = ctx;
-}
-
+#if !defined(USE_FREERTOS)
 /**
- * @brief  命令处理主循环（在 main while(1) 中调用）
+ * @brief  命令处理主循环
  */
 void cmd_parser_process(void)
 {
 	if (s_uart == NULL || s_motor == NULL) return;
 	if (!s_uart->rx_done) return;
 
-	uint8_t buf[256];
+	uint8_t buf[128];
 	uint16_t n = uart_recv(s_uart, buf, sizeof(buf) - 1);
 	if (n == 0) return;
-	// 确保字符串结尾
-	buf[n] = '\0';
 
-	cmd_t cmd = parse_cmd(buf, n);
-	execute_cmd(&cmd);
+	// 逐字节累积，遇到 \n 就解析一行
+	static uint8_t line_buf[64];
+	static uint16_t pos = 0;
+
+	for (uint16_t i = 0; i < n; i++){
+		if (buf[i] == '\n' || buf[i] == '\r'){
+			if (pos > 0){
+				line_buf[pos] = '\0';
+				cmd_t cmd = parse_cmd(line_buf, pos);
+				execute_cmd(&cmd);
+				pos = 0;
+			}
+		} else {
+			if (pos < sizeof(line_buf) - 1){
+				line_buf[pos++] = buf[i];
+			}
+		}
+	}
 }
+#else
+/**
+ * @brief  命令处理主循环
+ */
+void cmd_parser_process(void)
+{
+	if (s_uart == NULL || s_motor == NULL) return;
+	if (!s_uart->rx_done) return;
+
+	uint8_t buf[128];
+	uint16_t n = uart_recv(s_uart, buf, sizeof(buf) - 1);
+	if (n == 0) return;
+
+	// 逐字节累积，遇到 \n 就解析一行
+	static uint8_t line_buf[64];
+	static uint16_t pos = 0;
+
+	for (uint16_t i = 0; i < n; i++){
+		if (buf[i] == '\n' || buf[i] == '\r'){
+			if (pos > 0){
+				line_buf[pos] = '\0';
+
+
+				cmd_t cmd = parse_cmd(line_buf, pos);
+#if defined(USE_FREERTOS)
+				// 发送命令到任务队列中(直到发送完成)
+				osStatus_t ret	= osMessageQueuePut(usart_recv_queueHandle, &cmd, 0, 0);
+				if (ret!=osOK){
+					// 占位.
+				}
+#else
+				// 如果不是freertos, 直接执行任务
+				execute_cmd(&cmd);
+#endif
+				pos = 0;
+			}
+		} else {
+			if (pos < sizeof(line_buf) - 1){
+				line_buf[pos++] = buf[i];
+			}
+		}
+	}
+}
+#endif
 
 /**
  * @brief  发送帮助信息
@@ -82,7 +138,6 @@ void cmd_send_help(uart_base_t* uart)
 	SEND_STR("| R                		Query auto-tune result		|\r\n");
 	SEND_STR("| X:<target>,<kp>,<ki>,<kd>	Set PID params + target		|\r\n");
 	SEND_STR("| H				Show this help			|\r\n");
-	SEND_STR("| C:<run mode>			Set run mode (001/002)		|\r\n");
 	SEND_STR("===============================================================\r\n");
 
 	s_uart = prev;
@@ -121,7 +176,7 @@ static cmd_t parse_cmd(const uint8_t* data, uint16_t len)
 			uint16_t rpm_len = len - 2;
 			if (rpm_len >= sizeof(rpm_str)) rpm_len = sizeof(rpm_str) - 1;
 			memcpy(rpm_str, data + 2, rpm_len);
-			cmd.param1 = strtof(rpm_str, NULL);  // rpm（可正可负）
+			cmd.param1 = strtof(rpm_str, NULL);
 		}
 		break;
 
@@ -133,7 +188,7 @@ static cmd_t parse_cmd(const uint8_t* data, uint16_t len)
 			uint16_t angle_len = len - 2;
 			if (angle_len >= sizeof(angle_str)) angle_len = sizeof(angle_str) - 1;
 			memcpy(angle_str, data + 2, angle_len);
-			cmd.param1 = strtof(angle_str, NULL);  // angle（可正可负）
+			cmd.param1 = strtof(angle_str, NULL);
 		}
 		break;
 
@@ -169,11 +224,11 @@ static cmd_t parse_cmd(const uint8_t* data, uint16_t len)
 	case 'h':
 		cmd.id = CMD_HELP;
 		break;
-	case 'X':  // X:<target>,<kp>,<ki>,<kd>. 注: target可以为负数
+
+	case 'X':  // X:<target>,<kp>,<ki>,<kd>  target 可以为负数
 	case 'x':
 		cmd.id = CMD_PID_SETTING;
 		if (len > 2 && data[1] == ':') {
-			// 解析逗号分隔的 4 个浮点参数
 			const uint8_t* p = data + 2;
 			uint16_t remaining = len - 2;
 			float* params[] = {&cmd.param1, &cmd.param3, &cmd.param4, &cmd.param5};
@@ -192,16 +247,6 @@ static cmd_t parse_cmd(const uint8_t* data, uint16_t len)
 					break;
 				}
 			}
-		}
-		break;
-
-	case 'C':	// C:001 = 校位; C:002 = 起摆
-	case 'c':
-		if (len >= 5 && data[1] == ':'){
-			if (memcmp(data + 2, "001", 3) == 0)
-				cmd.id = CMD_PENDULUM_CALIB;
-			else if (memcmp(data + 2, "002", 3) == 0)
-				cmd.id = CMD_PENDULUM_SWING;
 		}
 		break;
 
@@ -235,9 +280,9 @@ static void execute_cmd(const cmd_t* cmd)
 		motor_direction_t dir = (rpm > 0) ? POSITIVE_DIR : NEGATIVE_DIR;
 
 		CRITICAL_ENTER();
-		auto_tune_active = 0;  // 退出自动调参模式
+		auto_tune_active = 0;
 		CRITICAL_EXIT();
-		step_motor_start(s_motor);  // 确保 PWM 已启动
+		step_motor_start(s_motor);
 		device_err_t ret = step_motor_set_speed(s_motor, rpm, dir);
 		if (ret == DRV_OK) {
 			send_ok();
@@ -268,7 +313,7 @@ static void execute_cmd(const cmd_t* cmd)
 		}
 		break;
 	}
-	// 请求停止命令
+	// 停止命令
 	case CMD_STOP: {
 		device_err_t ret = step_motor_stop(s_motor);
 		if (ret == DRV_OK) {
@@ -278,7 +323,7 @@ static void execute_cmd(const cmd_t* cmd)
 		}
 		break;
 	}
-	// 请求当前系统信息命令
+	// 查询系统状态
 	case CMD_QUERY: {
 		char status[128];
 		step_motor_information_t* info = &s_motor->step_motor_information;
@@ -302,7 +347,7 @@ static void execute_cmd(const cmd_t* cmd)
 		SEND_STR(status);
 		break;
 	}
-	// 设置步进模式命令
+	// 设置步进模式
 	case CMD_STEP_MODEL: {
 		uint8_t mode = cmd->param2;
 		if (mode != 1 && mode != 2 && mode != 4 && mode != 8 && mode != 16) {
@@ -315,7 +360,7 @@ static void execute_cmd(const cmd_t* cmd)
 		send_ok();
 		break;
 	}
-	// 自动调参开始命令
+	// 自动调参开始
 	case CMD_AUTOTUNE_START: {
 		step_motor_stop(s_motor);
 		CRITICAL_ENTER();
@@ -351,16 +396,13 @@ static void execute_cmd(const cmd_t* cmd)
 		break;
 	}
 #if USE_MOTOR_PID_CONTROL==1
-	// PID 设置目标和参数进行调参
+	// PID 设置目标和参数
 	case CMD_PID_SETTING: {
-		// X:<target>,<kp>,<ki>,<kd>
-		// param1=target, param3=Kp, param4=Ki, param5=Kd
 		float target = cmd->param1;
 		float kp = cmd->param3;
 		float ki = cmd->param4;
 		float kd = cmd->param5;
 
-		// 临界区内更新 PID 参数 + 退出自动调参，防止 ISR 读到不一致的中间状态
 		CRITICAL_ENTER();
 		s_motor->motor_pid.Kp = kp;
 		s_motor->motor_pid.Ki = ki;
@@ -370,7 +412,6 @@ static void execute_cmd(const cmd_t* cmd)
 		g_wave_target = target;
 		CRITICAL_EXIT();
 
-		// 启动电机
 		step_motor_start(s_motor);
 		step_motor_set_speed(s_motor,
 		                     target,
@@ -388,38 +429,6 @@ static void execute_cmd(const cmd_t* cmd)
 	case CMD_HELP:
 		cmd_send_help(s_uart);
 		break;
-
-	case CMD_PENDULUM_CALIB: {
-			if (s_pendulum == NULL) {
-				send_err("pendulum not initialized");
-				break;
-			}
-			if (s_pendulum->state != STATE_IDLE && s_pendulum->state != STATE_CALIB_DONE) {
-				send_err("pendulum busy");
-				break;
-			}
-			s_pendulum->state = STATE_CALIBRATE;
-			s_pendulum->calib_phase = 0;
-			s_pendulum->calib.calibrated = 0;
-			s_pendulum->limit_tripped = 0;
-			step_motor_set_speed(s_motor, CALIB_SPEED_RPM, POSITIVE_DIR);
-			SEND_STR("CALIB: start, seeking right limit...\r\n");
-			break;
-	}
-
-	case CMD_PENDULUM_SWING: {
-			if (s_pendulum == NULL) {
-				send_err("pendulum not initialized");
-				break;
-			}
-			if (!s_pendulum->calib.calibrated) {
-				send_err("not calibrated, send C:001 first");
-				break;
-			}
-			s_pendulum->state = STATE_MOVE_MID;
-			SEND_STR("SWING: moving to center...\r\n");
-			break;
-	}
 
 	default:
 		send_err("unknown cmd (H for help)");

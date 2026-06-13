@@ -39,7 +39,7 @@ static void uart_start_rx(uart_base_t* uart)
 }
 
 /**
- * @brief  HAL 接收回调：逐字节存入缓冲区，溢出则丢弃
+ * @brief  HAL 接收回调：逐字节存入缓冲区，遇到换行符标记帧完成
  */
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef* huart)
 {
@@ -53,6 +53,18 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef* huart)
 		uart->rx_buf[uart->rx_len] = uart_rx_byte;
 		uart->rx_len++;
 		uart->last_rx_tick = HAL_GetTick();
+
+		/* 遇到换行符 → 标记一帧接收完成 */
+		if (uart_rx_byte == '\n' || uart_rx_byte == '\r'){
+			uart->rx_done = 1;
+#ifdef USE_FREERTOS
+			if (uart_notify_task != NULL){
+				BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+				vTaskNotifyGiveFromISR(uart_notify_task, &xHigherPriorityTaskWoken);
+				portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+			}
+#endif
+		}
 	}
 
 	/* 继续接收下一字节（即使缓冲区满也不中断接收链） */
@@ -96,17 +108,6 @@ int uart_idle_hook(UART_HandleTypeDef* huart)
 			/* 仅 IDLE：手动清标志 */
 			__HAL_UART_CLEAR_IDLEFLAG(huart);
 		}
-
-		if (uart_active->rx_len > 0){
-			uart_active->rx_done = 1;
-#ifdef USE_FREERTOS
-			if (uart_notify_task != NULL){
-				BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-				vTaskNotifyGiveFromISR(uart_notify_task, &xHigherPriorityTaskWoken);
-				portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
-			}
-#endif
-		}
 		return 1;
 	}
 
@@ -130,7 +131,6 @@ device_err_t uart_init(uart_base_t* uart)
 
 	uart->rx_len = 0;
 	uart->rx_done = 0;
-
 	uart_start_rx(uart);
 
 	return DRV_OK;

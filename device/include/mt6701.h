@@ -11,10 +11,11 @@
 #include "device.h"
 
 /* ---- 速度计算频率（供 MX_TIM3_Init 使用）---- */
-#define speed_calc_freq     1000   /* Hz */
+#define speed_calc_freq		1000   /* Hz */
 
-#define MT6701_ANGLE_MAX    (2.0f * 3.1415926f)
-#define MT6701_RAW_MAX      ((1 << 14) - 1)   /* 16383 */
+#define MT6701_ANGLE_MAX	(2.0f * 3.1415926f)
+#define MT6701_RAW_MAX		((1 << 14) - 1)   /* 16383 */
+#define SPEED_CALC_DIV_TICKS	5		// 速度计算(每SPEED_CALC_DIV个tim3 ticks计算一次速度)
 
 /* ================================================================
  *  角度传感器基类（硬件抽象）

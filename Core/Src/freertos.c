@@ -25,7 +25,12 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "uart.h"
+#include "device.h"
+#include "mt6701.h"
+#include "angle_sensor.h"
+#include "cmd_parser.h"
+#include "adc.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -45,51 +50,57 @@
 
 /* Private variables ---------------------------------------------------------*/
 /* USER CODE BEGIN Variables */
-
+extern uart_base_t uart1;
+osMessageQueueId_t usart_send_queueHandle; // 被全局访问
+osMessageQueueId_t controller_task_handle;
+volatile sensor_state_t g_sensor; // 共享变量
+extern mt6701_t* g_dev; // 磁编码器变量
+extern AngleSensor sensor1;
+extern AngleSensor sensor2;
 /* USER CODE END Variables */
 /* Definitions for usart_send_task */
 osThreadId_t usart_send_taskHandle;
 const osThreadAttr_t usart_send_task_attributes = {
-  .name = "usart_send_task",
-  .stack_size = 192 * 4,
-  .priority = (osPriority_t) osPriorityBelowNormal,
+	.name = "usart_send_task",
+	.stack_size = 192 * 4,
+	.priority = (osPriority_t)osPriorityBelowNormal,
 };
 /* Definitions for usart_recv_task */
 osThreadId_t usart_recv_taskHandle;
 const osThreadAttr_t usart_recv_task_attributes = {
-  .name = "usart_recv_task",
-  .stack_size = 128 * 4,
-  .priority = (osPriority_t) osPriorityNormal,
+	.name = "usart_recv_task",
+	.stack_size = 128 * 4,
+	.priority = (osPriority_t)osPriorityNormal,
 };
 /* Definitions for controller_task */
 osThreadId_t controller_taskHandle;
 const osThreadAttr_t controller_task_attributes = {
-  .name = "controller_task",
-  .stack_size = 128 * 4,
-  .priority = (osPriority_t) osPriorityHigh,
+	.name = "controller_task",
+	.stack_size = 128 * 4,
+	.priority = (osPriority_t)osPriorityHigh,
 };
 /* Definitions for sensor_data_tas */
 osThreadId_t sensor_data_tasHandle;
 const osThreadAttr_t sensor_data_tas_attributes = {
-  .name = "sensor_data_tas",
-  .stack_size = 128 * 4,
-  .priority = (osPriority_t) osPriorityRealtime,
+	.name = "sensor_data_tas",
+	.stack_size = 128 * 4,
+	.priority = (osPriority_t)osPriorityRealtime,
 };
 /* Definitions for usart_recv_queue */
 osMessageQueueId_t usart_recv_queueHandle;
 const osMessageQueueAttr_t usart_recv_queue_attributes = {
-  .name = "usart_recv_queue"
+	.name = "usart_recv_queue"
 };
 
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN FunctionPrototypes */
-
+void uart_set_queue(osMessageQueueId_t message_queue_id);
 /* USER CODE END FunctionPrototypes */
 
-void usart_send_task_func(void *argument);
-void usart_recv_task_func(void *argument);
-void controller_task_func(void *argument);
-void sensor_data_updater_func(void *argument);
+void usart_send_task_func(void* argument);
+void usart_recv_task_func(void* argument);
+void controller_task_func(void* argument);
+void sensor_data_updater_func(void* argument);
 
 void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
 
@@ -98,52 +109,56 @@ void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
   * @param  None
   * @retval None
   */
-void MX_FREERTOS_Init(void) {
-  /* USER CODE BEGIN Init */
+void MX_FREERTOS_Init(void)
+{
+	/* USER CODE BEGIN Init */
 
-  /* USER CODE END Init */
+	/* USER CODE END Init */
 
-  /* USER CODE BEGIN RTOS_MUTEX */
+	/* USER CODE BEGIN RTOS_MUTEX */
 	/* add mutexes, ... */
-  /* USER CODE END RTOS_MUTEX */
+	/* USER CODE END RTOS_MUTEX */
 
-  /* USER CODE BEGIN RTOS_SEMAPHORES */
+	/* USER CODE BEGIN RTOS_SEMAPHORES */
 	/* add semaphores, ... */
-  /* USER CODE END RTOS_SEMAPHORES */
+	/* USER CODE END RTOS_SEMAPHORES */
 
-  /* USER CODE BEGIN RTOS_TIMERS */
+	/* USER CODE BEGIN RTOS_TIMERS */
 	/* start timers, add new ones, ... */
-  /* USER CODE END RTOS_TIMERS */
+	/* USER CODE END RTOS_TIMERS */
 
-  /* Create the queue(s) */
-  /* creation of usart_recv_queue */
-  usart_recv_queueHandle = osMessageQueueNew (64, sizeof(uint8_t), &usart_recv_queue_attributes);
+	/* Create the queue(s) */
+	/* creation of usart_recv_queue */
+	usart_recv_queueHandle = osMessageQueueNew(64, sizeof(uint8_t), &usart_recv_queue_attributes);
 
-  /* USER CODE BEGIN RTOS_QUEUES */
+	/* USER CODE BEGIN RTOS_QUEUES */
+	// 注册串口接收队列
+	uart_set_queue(usart_recv_queueHandle);
 	/* add queues, ... */
-  /* USER CODE END RTOS_QUEUES */
+	/* USER CODE END RTOS_QUEUES */
 
-  /* Create the thread(s) */
-  /* creation of usart_send_task */
-  usart_send_taskHandle = osThreadNew(usart_send_task_func, NULL, &usart_send_task_attributes);
+	/* Create the thread(s) */
+	/* creation of usart_send_task */
+	usart_send_taskHandle = osThreadNew(usart_send_task_func, NULL, &usart_send_task_attributes);
 
-  /* creation of usart_recv_task */
-  usart_recv_taskHandle = osThreadNew(usart_recv_task_func, NULL, &usart_recv_task_attributes);
+	/* creation of usart_recv_task */
+	usart_recv_taskHandle = osThreadNew(usart_recv_task_func, NULL, &usart_recv_task_attributes);
 
-  /* creation of controller_task */
-  controller_taskHandle = osThreadNew(controller_task_func, NULL, &controller_task_attributes);
+	/* creation of controller_task */
+	controller_taskHandle = osThreadNew(controller_task_func, NULL, &controller_task_attributes);
 
-  /* creation of sensor_data_tas */
-  sensor_data_tasHandle = osThreadNew(sensor_data_updater_func, NULL, &sensor_data_tas_attributes);
+	/* creation of sensor_data_tas */
+	sensor_data_tasHandle = osThreadNew(sensor_data_updater_func, NULL, &sensor_data_tas_attributes);
 
-  /* USER CODE BEGIN RTOS_THREADS */
+	/* USER CODE BEGIN RTOS_THREADS */
+	// 在这里注册控制任务句柄(优先级比控制任务高, 先初始化, 没有句柄变量未定义的问题)
+	controller_task_handle = controller_taskHandle;
 	/* add threads, ... */
-  /* USER CODE END RTOS_THREADS */
+	/* USER CODE END RTOS_THREADS */
 
-  /* USER CODE BEGIN RTOS_EVENTS */
+	/* USER CODE BEGIN RTOS_EVENTS */
 	/* add events, ... */
-  /* USER CODE END RTOS_EVENTS */
-
+	/* USER CODE END RTOS_EVENTS */
 }
 
 /* USER CODE BEGIN Header_usart_send_task_func */
@@ -153,14 +168,16 @@ void MX_FREERTOS_Init(void) {
   * @retval None
   */
 /* USER CODE END Header_usart_send_task_func */
-void usart_send_task_func(void *argument)
+void usart_send_task_func(void* argument)
 {
-  /* USER CODE BEGIN usart_send_task_func */
+	/* USER CODE BEGIN usart_send_task_func */
 	/* Infinite loop */
 	for (;;){
+		// 直接发送要显示的信息.
+
 		osDelay(1);
 	}
-  /* USER CODE END usart_send_task_func */
+	/* USER CODE END usart_send_task_func */
 }
 
 /* USER CODE BEGIN Header_usart_recv_task_func */
@@ -170,15 +187,24 @@ void usart_send_task_func(void *argument)
 * @retval None
 */
 /* USER CODE END Header_usart_recv_task_func */
-void usart_recv_task_func(void *argument)
+void usart_recv_task_func(void* argument)
 {
-  /* USER CODE BEGIN usart_recv_task_func */
+	/* USER CODE BEGIN usart_recv_task_func */
+	// 注册任务通知函数
+	uart_set_notify_task(&uart1, osThreadGetId());
+
 	/* Infinite loop */
 	for (;;){
-
+		// 当串口接收中断发送通知后, 该任务开始运行
+		uart_wait_rx(UINT32_MAX);
+		/**循环解析命令行命令
+		 * 主要功能: 解析出不同命令后将数据发送到串口消息队列中, 控制器命令设置一定的阻塞时间来实现读取, 解析命令.
+		 *
+		 */
+		cmd_parser_process();
 		osDelay(1);
 	}
-  /* USER CODE END usart_recv_task_func */
+	/* USER CODE END usart_recv_task_func */
 }
 
 /* USER CODE BEGIN Header_controller_task_func */
@@ -188,14 +214,27 @@ void usart_recv_task_func(void *argument)
 * @retval None
 */
 /* USER CODE END Header_controller_task_func */
-void controller_task_func(void *argument)
+void controller_task_func(void* argument)
 {
-  /* USER CODE BEGIN controller_task_func */
+	/* USER CODE BEGIN controller_task_func */
+	TickType_t init_tick = xTaskGetTickCount();
+	cmd_t cmd_data = {0};
 	/* Infinite loop */
 	for (;;){
+		// 设置为固定的 2ms 控制周期
+		vTaskDelayUntil(&init_tick, pdMS_TO_TICKS(2));
+		// 从消息队列中读取新的命令
+		osMessageQueueGet(usart_send_queueHandle, &cmd_data, 0, 0);
+		// 执行命令
+
+		// 读取传感器数据
+		ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+
+		// 具体的控制器逻辑...
+
 		osDelay(1);
 	}
-  /* USER CODE END controller_task_func */
+	/* USER CODE END controller_task_func */
 }
 
 /* USER CODE BEGIN Header_sensor_data_updater_func */
@@ -205,18 +244,57 @@ void controller_task_func(void *argument)
 * @retval None
 */
 /* USER CODE END Header_sensor_data_updater_func */
-void sensor_data_updater_func(void *argument)
+void sensor_data_updater_func(void* argument)
 {
-  /* USER CODE BEGIN sensor_data_updater_func */
+	/* USER CODE BEGIN sensor_data_updater_func */
 	/* Infinite loop */
+	TickType_t init_tick = xTaskGetTickCount();
+	float theta1_prev = 0, theta2_prev = 0, x_prev = 0;
+	float theta1_dot = 0, theta2_dot = 0, x_dot = 0;
+
 	for (;;){
-		osDelay(1);
+		// 设置固定更新周期:2ms, 与控制周期一致
+		vTaskDelayUntil(&init_tick, pdMS_TO_TICKS(2));
+		// 读取角度传感器（PA0=一级摆, PA1=二级摆，都在 ADC1 不同通道）
+		float theta1 = AngleSensor_GetFilteredAngle(&sensor1);
+		float theta2 = AngleSensor_GetFilteredAngle(&sensor2);
+
+		float x_cart = g_dev->sensor.angle_total;
+		float x_speed = g_dev->sensor.speed;
+
+		// 没有获取角速度接口, 这里直接计算
+		float dt = 0.002f;
+		float alpha = 0.3f;
+		float theta1_dot_raw = (theta1 - theta1_prev) / dt;
+		float theta2_dot_raw = (theta2 - theta2_prev) / dt;
+
+		theta1_dot = alpha * theta1_dot_raw + (1 - alpha) * theta1_dot;
+		theta2_dot = alpha * theta2_dot_raw + (1 - alpha) * theta2_dot;
+
+		theta1_prev = theta1;
+		theta2_prev = theta2;
+
+		// 写入共享结构体
+		taskENTER_CRITICAL();
+		g_sensor.theta1 = theta1;
+		g_sensor.theta2 = theta2;
+		g_sensor.theta1_dot = theta1_dot;
+		g_sensor.theta2_dot = theta2_dot;
+		g_sensor.x_cart = x_cart;
+		g_sensor.x_dot = x_dot;
+		taskEXIT_CRITICAL();
+
+		// TODO 通知控制任务(这里freertos 和 CMSIS V2兼容曾混用不知道是否有问题)
+		xTaskNotifyGive(controller_taskHandle);
 	}
-  /* USER CODE END sensor_data_updater_func */
+	/* USER CODE END sensor_data_updater_func */
 }
 
 /* Private application code --------------------------------------------------*/
 /* USER CODE BEGIN Application */
+void uart_set_queue(osMessageQueueId_t message_queue_id)
+{
+	usart_send_queueHandle = message_queue_id;
+}
 
 /* USER CODE END Application */
-
