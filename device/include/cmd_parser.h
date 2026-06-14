@@ -41,6 +41,9 @@ typedef enum CMD_ID {
 	CMD_HELP,		// H
 	CMD_PENDULUM_CALIB,		// C:001(校位)
 	CMD_PENDULUM_SWING,		// C:002(起摆)
+	CMD_LQR_ENABLE,
+	CMD_LQR_DISABLE,
+	CMD_LQR_RESET,
 } cmd_id_t;
 
 /** 解析后的命令结构 */

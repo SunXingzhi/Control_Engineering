@@ -100,8 +100,11 @@ void cmd_parser_process(void)
 
 				cmd_t cmd = parse_cmd(line_buf, pos);
 #if defined(USE_FREERTOS)
-				// 发送命令到任务队列中(直到发送完成)
-				osStatus_t ret	= osMessageQueuePut(usart_recv_queueHandle, &cmd, 0, 0);
+				/* 停机相关命令使用高优先级，并短暂等待控制任务腾出队列空间。 */
+				const uint8_t priority = (cmd.id == CMD_STOP || cmd.id == CMD_LQR_DISABLE)
+					? 1u
+					: 0u;
+				osStatus_t ret = osMessageQueuePut(usart_recv_queueHandle, &cmd, priority, 10u);
 				if (ret!=osOK){
 					// 占位.
 				}
@@ -246,6 +249,28 @@ static cmd_t parse_cmd(const uint8_t* data, uint16_t len)
 				} else {
 					break;
 				}
+			}
+		}
+		break;
+
+	case 'L':
+	case 'l':
+		if (len >= 3 && data[1] == ':') {
+			switch (data[2]) {
+			case 'E':
+			case 'e':
+				cmd.id = CMD_LQR_ENABLE;
+				break;
+			case 'D':
+			case 'd':
+				cmd.id = CMD_LQR_DISABLE;
+				break;
+			case 'R':
+			case 'r':
+				cmd.id = CMD_LQR_RESET;
+				break;
+			default:
+				break;
 			}
 		}
 		break;

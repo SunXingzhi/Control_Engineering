@@ -31,6 +31,8 @@
 #include "angle_sensor.h"
 #include "cmd_parser.h"
 #include "adc.h"
+#include "lqr_controller.h"
+#include "lqr_controller_config.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -51,12 +53,13 @@
 /* Private variables ---------------------------------------------------------*/
 /* USER CODE BEGIN Variables */
 extern uart_base_t uart1;
-osMessageQueueId_t usart_send_queueHandle; // 被全局访问
 osMessageQueueId_t controller_task_handle;
 volatile sensor_state_t g_sensor; // 共享变量
 extern mt6701_t* g_dev; // 磁编码器变量
 extern AngleSensor sensor1;
 extern AngleSensor sensor2;
+extern step_motor_t motor;
+volatile lqr_controller_output_t g_lqr_output;
 /* USER CODE END Variables */
 /* Definitions for usart_send_task */
 osThreadId_t usart_send_taskHandle;
@@ -94,7 +97,6 @@ const osMessageQueueAttr_t usart_recv_queue_attributes = {
 
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN FunctionPrototypes */
-void uart_set_queue(osMessageQueueId_t message_queue_id);
 /* USER CODE END FunctionPrototypes */
 
 void usart_send_task_func(void* argument);
@@ -129,11 +131,9 @@ void MX_FREERTOS_Init(void)
 
 	/* Create the queue(s) */
 	/* creation of usart_recv_queue */
-	usart_recv_queueHandle = osMessageQueueNew(64, sizeof(uint8_t), &usart_recv_queue_attributes);
+	usart_recv_queueHandle = osMessageQueueNew(4, sizeof(cmd_t), &usart_recv_queue_attributes);
 
 	/* USER CODE BEGIN RTOS_QUEUES */
-	// 注册串口接收队列
-	uart_set_queue(usart_recv_queueHandle);
 	/* add queues, ... */
 	/* USER CODE END RTOS_QUEUES */
 
@@ -217,22 +217,48 @@ void usart_recv_task_func(void* argument)
 void controller_task_func(void* argument)
 {
 	/* USER CODE BEGIN controller_task_func */
-	TickType_t init_tick = xTaskGetTickCount();
 	cmd_t cmd_data = {0};
+	lqr_controller_t controller;
+	lqr_controller_init(&controller);
 	/* Infinite loop */
 	for (;;){
-		// 设置为固定的 2ms 控制周期
-		vTaskDelayUntil(&init_tick, pdMS_TO_TICKS(2));
-		// 从消息队列中读取新的命令
-		osMessageQueueGet(usart_send_queueHandle, &cmd_data, 0, 0);
-		// 执行命令
+		/* 传感器通知定义控制周期，有限等待用于检测传感器任务超时。 */
+		const uint32_t notification_count = ulTaskNotifyTake(
+			pdTRUE,
+			pdMS_TO_TICKS(LQR_SENSOR_TIMEOUT_MS));
 
-		// 读取传感器数据
-		ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+		/* 扫描当前命令，停机与停用命令由高优先级队列优先返回。 */
+		cmd_data.id = CMD_NONE;
+		osMessageQueueGet(usart_recv_queueHandle, &cmd_data, 0, 0);
+		switch (cmd_data.id){
+		case CMD_LQR_ENABLE:
+			lqr_controller_handle_command(&controller, LQR_COMMAND_ENABLE);
+			break;
+		case CMD_LQR_DISABLE:
+			lqr_controller_handle_command(&controller, LQR_COMMAND_DISABLE);
+			break;
+		case CMD_STOP:
+			lqr_controller_handle_command(&controller, LQR_COMMAND_DISABLE);
+			step_motor_stop(&motor);
+			break;
+		case CMD_LQR_RESET:
+			lqr_controller_handle_command(&controller, LQR_COMMAND_RESET_FAULT);
+			break;
+		default:
+			break;
+		}
 
-		// 具体的控制器逻辑...
+		sensor_state_t sensor_snapshot;
+		taskENTER_CRITICAL();
+		sensor_snapshot = g_sensor;
+		taskEXIT_CRITICAL();
 
-		osDelay(1);
+		lqr_controller_output_t output = lqr_controller_update(
+			&controller,
+			&sensor_snapshot,
+			notification_count != 0);
+		g_lqr_output = output;
+		lqr_controller_apply_motor_output(&output, &motor);
 	}
 	/* USER CODE END controller_task_func */
 }
@@ -292,9 +318,4 @@ void sensor_data_updater_func(void* argument)
 
 /* Private application code --------------------------------------------------*/
 /* USER CODE BEGIN Application */
-void uart_set_queue(osMessageQueueId_t message_queue_id)
-{
-	usart_send_queueHandle = message_queue_id;
-}
-
 /* USER CODE END Application */
