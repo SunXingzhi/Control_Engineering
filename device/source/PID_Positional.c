@@ -1,19 +1,120 @@
-#include "PID.h"
+/**
+ * 位置式PID（带时间自适应的梯形积分 + 积分抗饱和）
+ *
+ * 公式:
+ *   err = Target - actual
+ *   SumError += (err + prev_error) * deltaT / 2   // 梯形积分
+ *   DError = (err - prev_error) / deltaT           // 差分近似微分
+ *   Output = Kp*err + Ki*SumError + Kd*DError
+ *
+ * 特点:
+ *   - 使用 DWT 微秒计时，自适应调用频率
+ *   - 积分抗饱和: 输出饱和时冻结积分累加
+ *   - 首次调用跳过微分和积分（prev_error=0, deltaT 不可信）
+ */
+#include <stdint.h>
 
-typedef struct {
-    float SumError;
-    float DError;
+#include "PID.h"
+#include <stdlib.h>
+
+/* DWT 微秒时间戳，定义在 control.c 中 */
+extern uint32_t DWT_GetTick_us(void);
+
+typedef struct{
+	float SumError; // 积分累加值
+	float DError; // 上一次的微分值（缓存供调试用）
+	float prev_error; // 上一次误差
+	uint32_t t_k_1; // 上次计算时间 (us)
+	uint8_t initialized; // 首次调用标志
 } PID_PosState_t;
 
-// 位置式公式
-// Output = Kp*Error + Ki*SumError + Kd*DError
+static void* pos_init(void)
+{
+	return calloc(1, sizeof(PID_PosState_t));
+}
 
-// const PID_AlgoInterface_t PID_POSITIONAL_OPS = {
-//     .init    = pos_init,
-//     .calc    = pos_calc,
-//     .reset   = pos_reset,
-//     .destroy = free,
-// };
+/**
+ * @brief  位置式 PID 计算（带梯形积分 + 积分抗饱和）
+ * @param  pid:    PID 实例（Kp/Ki/Kd/Target/OutputMax/OutputMin 已设置）
+ * @param  actual: 当前实际值（传感器反馈）
+ * @retval PID 输出值
+ */
+static float pos_calc(PID_t* pid, float actual)
+{
+	PID_PosState_t* st = (PID_PosState_t*)pid->algo_state;
 
+	uint32_t now_us = DWT_GetTick_us();
+	float err = pid->Target - actual;
 
+	/* 首次调用: 只记录时间和误差，不输出 */
+	if (!st->initialized){
+		st->t_k_1 = now_us;
+		st->prev_error = err;
+		st->initialized = 1;
+		pid->Error = err;
+		pid->LastError = 0;
+		return 0.0f;
+	}
 
+	/* 计算时间间隔 (秒) */
+	float deltaT = (float)(now_us - st->t_k_1) * 1e-6f;
+	if (deltaT <= 0.0f) deltaT = 1e-6f; // 防护: 最小 1us
+
+	/* 梯形积分 */
+	st->SumError += (err + st->prev_error) * deltaT * 0.5f;
+
+	/* 积分限幅 (抗饱和) */
+	if (st->SumError > pid->OutputMax) st->SumError = pid->OutputMax;
+	if (st->SumError < pid->OutputMin) st->SumError = pid->OutputMin;
+
+	/* 微分 (差分近似) */
+	st->DError = (err - st->prev_error) / deltaT;
+
+	/* PID 输出 */
+	float output = pid->Kp * err
+		+ pid->Ki * st->SumError
+		+ pid->Kd * st->DError;
+
+	/* 输出限幅 + 饱和时冻结积分 */
+	if (output > pid->OutputMax){
+		output = pid->OutputMax;
+		/* 如果误差方向与饱和方向一致，撤销本次积分累加 */
+		if (err > 0)
+			st->SumError -= (err + st->prev_error) * deltaT * 0.5f;
+	}
+	else if (output < pid->OutputMin){
+		output = pid->OutputMin;
+		if (err < 0)
+			st->SumError -= (err + st->prev_error) * deltaT * 0.5f;
+	}
+
+	/* 更新历史 */
+	st->t_k_1 = now_us;
+	st->prev_error = err;
+	pid->Error = err;
+	pid->LastError = err;
+	pid->Output = output;
+
+	return output;
+}
+
+static void pos_reset(PID_t* pid)
+{
+	PID_PosState_t* st = (PID_PosState_t*)pid->algo_state;
+	st->SumError = 0;
+	st->DError = 0;
+	st->prev_error = 0;
+	st->t_k_1 = 0;
+	st->initialized = 0;
+	pid->Error = 0;
+	pid->LastError = 0;
+	pid->Output = 0;
+}
+
+/* 导出接口 */
+const PID_AlgoInterface_t PID_POSITIONAL_OPS = {
+	.init = pos_init,
+	.calc = pos_calc,
+	.reset = pos_reset,
+	.destroy = free,
+};

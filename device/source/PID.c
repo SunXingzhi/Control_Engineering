@@ -4,10 +4,11 @@
 
 PID_t*	pid	= NULL;
 extern const PID_AlgoInterface_t PID_INCREMENTAL_OPS;
+extern const PID_AlgoInterface_t PID_POSITIONAL_OPS;
 
 // 算法注册表
 static const PID_AlgoInterface_t* algo_table[] = {
-	// [PID_POSITIONAL]  = &PID_POSITIONAL_OPS, 还未完成
+	[PID_POSITIONAL]  = &PID_POSITIONAL_OPS,
 	[PID_INCREMENTAL] = &PID_INCREMENTAL_OPS,
 };
 
@@ -61,5 +62,5 @@ void PID_reset(PID_t* pid)
 
 void PID_destroy(PID_t* pid)
 {
-	return pid->interface->destroy(pid);
+	pid->interface->destroy(pid->algo_state);
 }

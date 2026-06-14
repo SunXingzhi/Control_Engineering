@@ -29,6 +29,7 @@
 #include "auto_tune.h"
 #include "device.h"
 #include "tim.h"
+#include "pendulum.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -305,17 +306,26 @@ extern mt6701_t* g_dev;
  * @brief  EXTI 中断回调（HAL_GPIO_EXTI_IRQHandler 触发后自动调用）
  *         限位开关压下时 IO 为 LOW（下降沿），松开时为 HIGH（上升沿）
  *         仅在下降沿（按下）时置标志，上升沿（松开）忽略
+ *         带 20ms 消抖，兼容裸机和 FreeRTOS（HAL_GetTick() 两者通用）
  */
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
+    static uint32_t last_tick_close  = 0;
+    static uint32_t last_tick_remote = 0;
+    uint32_t now = HAL_GetTick();
+
     if (GPIO_Pin == MOTOR_LIMIT_CLOSE_Pin) {
-        // PA11 右限位：按下时为 LOW，RISING_FALLING 下降沿触发
+        // PA11 右限位：按下时为 LOW
+        if (now - last_tick_close < LIMIT_DEBOUNCE_MS) return;  // 消抖
+        last_tick_close = now;
         if (HAL_GPIO_ReadPin(MOTOR_LIMIT_CLOSE_GPIO_Port, MOTOR_LIMIT_CLOSE_Pin) == GPIO_PIN_RESET) {
             g_limit_right_flag = 1;
         }
     }
     else if (GPIO_Pin == MOTOR_LIMIT_REMOTE_Pin) {
-        // PA12 左限位：按下时为 LOW，RISING_FALLING 下降沿触发
+        // PA12 左限位：按下时为 LOW
+        if (now - last_tick_remote < LIMIT_DEBOUNCE_MS) return;  // 消抖
+        last_tick_remote = now;
         if (HAL_GPIO_ReadPin(MOTOR_LIMIT_REMOTE_GPIO_Port, MOTOR_LIMIT_REMOTE_Pin) == GPIO_PIN_RESET) {
             g_limit_left_flag = 1;
         }
@@ -386,11 +396,11 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* htim)
 		extern volatile uint8_t g_wave_ready;
 		extern volatile float g_wave_target;
 		extern volatile float g_wave_actual;
-		extern volatile uint8_t auto_tune_active;
+		// extern volatile uint8_t auto_tune_active;
 		static volatile uint8_t tick = 0;
 		if (++tick >= 5){
 			tick = 0;
-			extern PID_AutoTune_t tuner;
+			// extern PID_AutoTune_t tuner;
 			// g_wave_target = auto_tune_active ? tuner.setpoint : motor->motor_pid.Target;
 			g_wave_actual = g_dev->sensor.speed;
 			g_wave_ready = 1;

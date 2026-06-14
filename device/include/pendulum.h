@@ -95,6 +95,9 @@ typedef struct {
 #define ANGLE_IS_LEFT(angle)    ((angle) > ANGLE_LEFT_THRESH)
 #define ANGLE_IS_RIGHT(angle)   ((angle) <= ANGLE_LEFT_THRESH)
 
+/*========== 限位消抖 ==========*/
+#define LIMIT_DEBOUNCE_MS       20      // 消抖时间 (ms)，机械开关典型抖动 5~15ms
+
 /*========== 限位 IO 读取宏 ==========*/
 // 压下时 IO 为 LOW (GPIO_PIN_RESET)，未压下时 HIGH
 #define LIMIT_RIGHT_IS_HIT()  (HAL_GPIO_ReadPin(MOTOR_LIMIT_CLOSE_GPIO_Port, \

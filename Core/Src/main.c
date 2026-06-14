@@ -38,6 +38,7 @@
 #include "angle_sensor.h"
 #include "pendulum.h"
 #include "cmd_parser.h"
+#include "control.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -194,7 +195,8 @@ int main(void)
 	                  PRESET_AUTOTUNE_HYSTERESIS,
 	                  PRESET_AUTOTUNE_SETPOINT,
 	                  PRESET_AUTOTUNE_CYCLES);
-
+	// 精细定时器初始化
+	DWT_Init();
 	// 初始化串口命令测试
 	test_cmd_motor_init(&motor, &uart1);
 
