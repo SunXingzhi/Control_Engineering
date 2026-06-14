@@ -1,6 +1,6 @@
 #include "../include/control.h"
 #include "PID.h"
-#include "../include/link_angle_sensor.h"
+#include "angle_sensor.h"
 #include <math.h>
 #include "qmath.h"
 

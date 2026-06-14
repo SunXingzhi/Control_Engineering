@@ -199,7 +199,8 @@ int main(void)
 	DWT_Init();
 	// 初始化串口命令测试
 	test_cmd_motor_init(&motor, &uart1);
-
+	// 控制器初始化
+	// control_init();
 	cmd_parser_set_pendulum(&pendulum);
 
 	/* USER CODE END 2 */
@@ -209,33 +210,9 @@ int main(void)
 	while (1){
 		/* USER CODE END WHILE */
 		test_cmd_motor_loop();
-
-// 		// 波形输出（主循环打印，不阻塞 ISR）
-// 		if (g_wave_ready){
-// 			CRITICAL_ENTER();
-// 			g_wave_ready = 0;
-// 			CRITICAL_EXIT();
-// #if (USE_MOTOR_PID_CONTROL)==1
-// 			// 调试：打印 PID 输出、编码器速度、误差、实际频率
-// 			extern volatile float g_pid_debug_output;
-// 			extern volatile float g_pid_debug_actual;
-// 			extern volatile float g_pid_debug_error;
-// 			extern volatile uint16_t g_pid_debug_freq;
-// 			printf("%.1f,%.1f\r\n",
-// 			       g_wave_target,
-// 			       (double)g_pid_debug_actual);
-//
-// #endif
-		// }
-
-		/* 读取传感器 */
-		// angle_sensor_read_total_angle(&encorder, &total_angle);
-		// angle_sensor_read_angle(&encorder, &angle);
-		// angle_sensor_read_speed(&encorder, &speed);
-		// anglesensor = AngleSensor_GetFilteredAngle(&sensor1);
-		//
-
-		/* 起摆状态机 */
+		// 控制器开始
+		//CONTROL_proc();
+		// 起摆状态机
 		pendulum_loop(&pendulum, total_angle, anglesensor);
 	}
 	/* USER CODE END 3 */
