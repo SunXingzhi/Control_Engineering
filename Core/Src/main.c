@@ -207,11 +207,28 @@ int main(void)
 
 	/* Infinite loop */
 	/* USER CODE BEGIN WHILE */
+	uint32_t last_print_ms = 0;
 	while (1){
 		/* USER CODE END WHILE */
 		test_cmd_motor_loop();
 		// 控制器开始
 		//CONTROL_proc();
+		// 更新读取角度
+		angle_sensor_read_total_angle(&encorder, &total_angle);
+		// 更新摆杆角度传感器
+		anglesensor = AngleSensor_GetFilteredAngle(&sensor1);
+
+		// 调试打印：每 200ms 输出一次角度传感器数据
+		uint32_t now_ms = HAL_GetTick();
+		if (now_ms - last_print_ms >= 200) {
+			last_print_ms = now_ms;
+			uint32_t raw = AngleSensor_ReadRaw(&sensor1);
+			printf("ADC_RAW=%lu  ANGLE=%.2f  ENCODER=%.2f\r\n",
+			       (unsigned long)raw,
+			       (double)anglesensor,
+			       (double)total_angle);
+		}
+
 		// 起摆状态机
 		pendulum_loop(&pendulum, total_angle, anglesensor);
 	}
