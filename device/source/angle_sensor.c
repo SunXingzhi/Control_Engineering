@@ -1,5 +1,4 @@
 #include "angle_sensor.h"
-#include <math.h>   /* 用于 fmodf */
 
 /* ---------- 内部辅助函数 ---------- */
 
@@ -31,13 +30,13 @@ static float angle_sensor_update_filter(AngleSensor* sensor)
 
 /**
  * @brief 将任意角度规范化到 [0, range)
+ * @note  用 while 循环替代 fmodf，避免链接软浮点数学库
+ *        倒立摆角度变化范围有限（通常 < 3 圈），循环次数极少
  */
 static float normalize_angle(float angle, float range)
 {
-    angle = fmodf(angle, range);
-    if (angle < 0.0f) {
-        angle += range;
-    }
+    while (angle >= range) angle -= range;
+    while (angle < 0.0f)  angle += range;
     return angle;
 }
 

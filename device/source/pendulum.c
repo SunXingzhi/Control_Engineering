@@ -87,7 +87,7 @@ static void do_calibration(pendulum_ctx_t *ctx)
     case 0: /* 正转中 (POSITIVE_DIR，平台右移)，检测右限位 (PA11) */
         if (LIMIT_RIGHT_IS_HIT()) {
             step_motor_stop(&motor);
-            // ctx->calib.limit_right = total_angle;
+            ctx->calib.limit_right = total_angle;
             ctx->calib_phase = 1;
             /* 立即反转 (NEGATIVE_DIR)，平台左移，寻找左限位 */
             step_motor_set_speed(&motor, CALIB_SPEED_RPM, NEGATIVE_DIR);
@@ -98,14 +98,14 @@ static void do_calibration(pendulum_ctx_t *ctx)
     case 1: /* 反转中 (NEGATIVE_DIR，平台左移)，检测左限位 (PA12) */
         if (LIMIT_LEFT_IS_HIT()) {
             step_motor_stop(&motor);
-            // ctx->calib.limit_left = total_angle;
-            // ctx->calib.limit_center = (ctx->calib.limit_left + ctx->calib.limit_right) / 2.0f;
+            ctx->calib.limit_left = total_angle;
+            ctx->calib.limit_center = (ctx->calib.limit_left + ctx->calib.limit_right) / 2.0f;
             ctx->calib.calibrated = 1;
             ctx->state = STATE_CALIB_DONE;
-            // printf("CALIB: left = %.2f, right = %.2f, center = %.2f\r\n",
-            //        (double)ctx->calib.limit_left,
-            //        (double)ctx->calib.limit_right,
-            //        (double)ctx->calib.limit_center);
+            printf("CALIB: left = %.2f, right = %.2f, center = %.2f\r\n",
+                   (double)ctx->calib.limit_left,
+                   (double)ctx->calib.limit_right,
+                   (double)ctx->calib.limit_center);
         }
         break;
     }
