@@ -1,6 +1,5 @@
 #include "qmath.h"
-#include "device.h"   /* 提供 PI 宏 */
-#include <math.h>
+#include "device.h"   /* 提供 PI 宏 + self_fabs */
 #include <float.h>
 #include <stdio.h>
 
@@ -669,8 +668,8 @@ static const float atan_val[1000] = {
 
 float qsin_rad(float x) {
     // 规范化到[0, 2π)
-    x = fmodf(x, TWO_PI);
-    if (x < 0) x += TWO_PI;
+    while (x >= TWO_PI) x -= TWO_PI;
+    while (x < 0.0f)   x += TWO_PI;
 
     float sign = 1.0f;
 
@@ -709,9 +708,9 @@ float qtan_rad(float x) {
     float s = qsin_rad(x);
     float c = qcos_rad(x);
 
-    // 避免除零错误
-    if (fabsf(c) < 1e-1f) {
-        return tanf(x);
+    // 避免除零错误：cos 接近 0 时返回极大值
+    if (self_fabs(c) < 1e-6f) {
+        return (s > 0.0f) ? 1e6f : -1e6f;
     }
 
     return s / c;

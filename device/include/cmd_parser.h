@@ -30,17 +30,21 @@
 /** 命令 ID */
 typedef enum CMD_ID {
 	CMD_NONE = 0,
-	CMD_SPEED,		// S:<rpm>,<dir>
-	CMD_ANGLE,		// A:<angle>,<dir>
-	CMD_STOP,		// P
-	CMD_QUERY,		// Q
-	CMD_STEP_MODEL,		// M:<mode>
-	CMD_AUTOTUNE_START,	// T
-	CMD_AUTOTUNE_RESULT,	// R
-	CMD_PID_SETTING,	// X
-	CMD_HELP,		// H
-	CMD_PENDULUM_CALIB,		// C:001(校位)
-	CMD_PENDULUM_SWING,		// C:002(起摆)
+	CMD_SPEED,				// S:<rpm>,<dir>
+	CMD_ANGLE,				// A:<angle>,<dir>
+	CMD_STOP,				// P
+	CMD_QUERY,				// Q
+	CMD_STEP_MODEL,				// M:<mode>
+	CMD_AUTOTUNE_START,			// T
+	CMD_AUTOTUNE_RESULT,			// R
+	CMD_PID_SETTING,			// X:<target>,<Kp>,<Ki>,<Kd>
+	CMD_ANGLE_PID_SETTING,			// E:<Kp>,<Ki>,<Kd>
+	CMD_ANGLE_VELOCITY_PID_SETTING,		// F:<Kp>,<Ki>,<Kd>
+	CMD_POS_PID_SETTING,			// G:<Kp>,<Ki>,<Kd>
+	CMD_QUERY_PID,				// I
+	CMD_HELP,				// H
+	CMD_PENDULUM_CALIB,			// C:001(校位)
+	CMD_PENDULUM_SWING,			// C:002(起摆)
 } cmd_id_t;
 
 /** 解析后的命令结构 */
@@ -58,9 +62,13 @@ typedef struct CMD {
  * @param  uart: 串口实例指针
  * @param  motor: 电机实例指针
  */
-void cmd_parser_init(uart_base_t* uart, step_motor_t* motor);
+void cmd_parser_init(uart_base_t* uart, step_motor_t* motor, pendulum_ctx_t* ctx);
 
-void cmd_parser_set_pendulum(pendulum_ctx_t* ctx);
+// /**
+//  *
+//  * @param ctx
+//  */
+// void cmd_parser_set_pendulum(pendulum_ctx_t* ctx);
 
 /**
  * @brief  命令处理主循环（在 main while(1) 中调用）

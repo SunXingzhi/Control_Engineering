@@ -14,6 +14,7 @@
 
 #include "stm32f1xx_hal.h"
 #include "driver_step_motor.h"
+#include "uart.h"
 
 /*========== 状态枚举 ==========*/
 typedef enum {
@@ -120,4 +121,18 @@ void pendulum_parse_command(pendulum_ctx_t *ctx, uint8_t *buf, uint16_t len);
  */
 void pendulum_loop(pendulum_ctx_t *ctx, float total_angle, float pendulum_angle);
 
+
+/**
+ * @brief  初始化测试环境（串口 + 电机 + 命令解析器）
+ * @param  motor: 电机实例指针
+ * @param  uart:  串口实例指针
+ * @retval device_err_t
+ */
+device_err_t cmd_pendulum_init(step_motor_t* motor, uart_base_t* uart, pendulum_ctx_t* ctx);
+
+/**
+ * @brief  测试主循环（在 main while(1) 中调用）
+ * @note   非阻塞，检查串口命令并执行
+ */
+void cmd_pendulum_loop(void);
 #endif /* __PENDULUM_H */

@@ -15,6 +15,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
+#include "cmd_parser.h"
 
 /* 外部变量（定义在 main.c 中）*/
 extern step_motor_t motor;
@@ -31,7 +32,7 @@ static void do_disturb(pendulum_ctx_t *ctx);
 static void do_swing(pendulum_ctx_t *ctx);
 static uint8_t check_limit_hit(pendulum_ctx_t *ctx, float total_angle, motor_direction_t dir);
 static void check_limit_switches(pendulum_ctx_t *ctx);
-
+//
 /* ============================================================ */
 /*                     状态机主循环入口                           */
 /* ============================================================ */
@@ -289,4 +290,30 @@ static void check_limit_switches(pendulum_ctx_t *ctx)
         step_motor_stop(&motor);
         ctx->limit_tripped = 1;
     }
+}
+
+// ============================ 倒立摆命令行实现 ==========================
+/**
+ * @brief  初始化测试环境
+ */
+device_err_t cmd_pendulum_init(step_motor_t* motor, uart_base_t* uart, pendulum_ctx_t* ctx)
+{
+    if (motor == NULL || uart == NULL) return DRV_ERR_NULL;
+
+    // 初始化命令解析器
+    cmd_parser_init(uart, motor, ctx);
+
+    // 发送欢迎信息和帮助
+    uart_send(uart, (uint8_t*)"\r\n=== Motor CMD Test ===\r\n", 26);
+    cmd_send_help(uart);
+
+    return DRV_OK;
+}
+
+/**
+ * @brief  测试主循环
+ */
+void cmd_pendulum_loop(void)
+{
+    cmd_parser_process();
 }

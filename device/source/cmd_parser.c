@@ -5,6 +5,7 @@
 
 #include "../include/cmd_parser.h"
 #include "../include/auto_tune.h"
+#include "../include/control.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -15,8 +16,15 @@ static step_motor_t*	s_motor = NULL;
 static pendulum_ctx_t*	s_pendulum = NULL;
 
 /* 自动调参实例（定义在 main.c 中） */
+#if USE_MOTOR_PID_CONTROL==1
 extern volatile PID_AutoTune_t tuner;
 extern volatile uint8_t auto_tune_active;
+#endif
+
+/* 3环PID实例 */
+extern PID_t PID_theta; // θ角度环的PID
+extern PID_t PID_theta_dot; // θ.角速度环的PID
+extern PID_t PID_x; // x位置环的PID
 
 /* 发送字符串的便捷宏 */
 #define SEND_STR(s)   uart_send(s_uart, (uint8_t*)(s), strlen(s))
@@ -26,7 +34,6 @@ static cmd_t  parse_cmd(const uint8_t* data, uint16_t len);
 static void   execute_cmd(const cmd_t* cmd);
 static void   send_ok(void);
 static void   send_err(const char* reason);
-static void   send_float(float val);
 
 /* ======================== 公共 API ======================== */
 
@@ -35,14 +42,10 @@ static void   send_float(float val);
  * @param  uart:  串口实例指针
  * @param  motor: 电机实例指针
  */
-void cmd_parser_init(uart_base_t* uart, step_motor_t* motor)
+void cmd_parser_init(uart_base_t* uart, step_motor_t* motor, pendulum_ctx_t* ctx)
 {
 	s_uart  = uart;
 	s_motor = motor;
-}
-
-void cmd_parser_set_pendulum(pendulum_ctx_t* ctx)
-{
 	s_pendulum = ctx;
 }
 
@@ -80,7 +83,11 @@ void cmd_send_help(uart_base_t* uart)
 	SEND_STR("| M:<mode>         		Set step mode (1/2/4/8/16)	|\r\n");
 	SEND_STR("| T                		Start auto-tune (relay method)	|\r\n");
 	SEND_STR("| R                		Query auto-tune result		|\r\n");
-	SEND_STR("| X:<target>,<kp>,<ki>,<kd>	Set PID params + target		|\r\n");
+	SEND_STR("| X:<target>,<kp>,<ki>,<kd>	Set motor PID params + target	|\r\n");
+	SEND_STR("| E:<kp>,<ki>,<kd>		Set pos loop PID (PID_x)	|\r\n");
+	SEND_STR("| F:<kp>,<ki>,<kd>		Set angle loop PID (PID_T)	|\r\n");
+	SEND_STR("| G:<kp>,<ki>,<kd>		Set angvel loop PID (PID_TD)	|\r\n");
+	SEND_STR("| I                		Query balance PID params	|\r\n");
 	SEND_STR("| H				Show this help			|\r\n");
 	SEND_STR("| C:<run mode>			Set run mode (001/002)		|\r\n");
 	SEND_STR("===============================================================\r\n");
@@ -165,6 +172,11 @@ static cmd_t parse_cmd(const uint8_t* data, uint16_t len)
 		cmd.id = CMD_AUTOTUNE_RESULT;
 		break;
 
+	case 'I':  // 查询平衡 PID 参数
+	case 'i':
+		cmd.id = CMD_QUERY_PID;
+		break;
+
 	case 'H':  // 帮助
 	case 'h':
 		cmd.id = CMD_HELP;
@@ -191,6 +203,66 @@ static cmd_t parse_cmd(const uint8_t* data, uint16_t len)
 				} else {
 					break;
 				}
+			}
+		}
+		break;
+
+	case 'E':  // E:<kp>,<ki>,<kd>  位移环 PID
+	case 'e':
+		cmd.id = CMD_POS_PID_SETTING;
+		if (len > 2 && data[1] == ':') {
+			const uint8_t* p = data + 2;
+			uint16_t remaining = len - 2;
+			float* params[] = {&cmd.param3, &cmd.param4, &cmd.param5};
+			for (int i = 0; i < 3 && remaining > 0; i++) {
+				char tmp[16] = {0};
+				const uint8_t* comma = memchr(p, ',', remaining);
+				uint16_t field_len = comma ? (uint16_t)(comma - p) : remaining;
+				if (field_len >= sizeof(tmp)) field_len = sizeof(tmp) - 1;
+				memcpy(tmp, p, field_len);
+				*params[i] = strtof(tmp, NULL);
+				if (comma) { p = comma + 1; remaining -= (field_len + 1); }
+				else break;
+			}
+		}
+		break;
+
+	case 'F':  // F:<kp>,<ki>,<kd>  角度环 PID
+	case 'f':
+		cmd.id = CMD_ANGLE_PID_SETTING;
+		if (len > 2 && data[1] == ':') {
+			const uint8_t* p = data + 2;
+			uint16_t remaining = len - 2;
+			float* params[] = {&cmd.param3, &cmd.param4, &cmd.param5};
+			for (int i = 0; i < 3 && remaining > 0; i++) {
+				char tmp[16] = {0};
+				const uint8_t* comma = memchr(p, ',', remaining);
+				uint16_t field_len = comma ? (uint16_t)(comma - p) : remaining;
+				if (field_len >= sizeof(tmp)) field_len = sizeof(tmp) - 1;
+				memcpy(tmp, p, field_len);
+				*params[i] = strtof(tmp, NULL);
+				if (comma) { p = comma + 1; remaining -= (field_len + 1); }
+				else break;
+			}
+		}
+		break;
+
+	case 'G':  // G:<kp>,<ki>,<kd>  角速度环 PID
+	case 'g':
+		cmd.id = CMD_ANGLE_VELOCITY_PID_SETTING;
+		if (len > 2 && data[1] == ':') {
+			const uint8_t* p = data + 2;
+			uint16_t remaining = len - 2;
+			float* params[] = {&cmd.param3, &cmd.param4, &cmd.param5};
+			for (int i = 0; i < 3 && remaining > 0; i++) {
+				char tmp[16] = {0};
+				const uint8_t* comma = memchr(p, ',', remaining);
+				uint16_t field_len = comma ? (uint16_t)(comma - p) : remaining;
+				if (field_len >= sizeof(tmp)) field_len = sizeof(tmp) - 1;
+				memcpy(tmp, p, field_len);
+				*params[i] = strtof(tmp, NULL);
+				if (comma) { p = comma + 1; remaining -= (field_len + 1); }
+				else break;
 			}
 		}
 		break;
@@ -233,10 +305,12 @@ static void execute_cmd(const cmd_t* cmd)
 		}
 
 		motor_direction_t dir = (rpm > 0) ? POSITIVE_DIR : NEGATIVE_DIR;
-
+#if USE_MOTOR_PID_CONTROL==1
 		CRITICAL_ENTER();
 		auto_tune_active = 0;  // 退出自动调参模式
 		CRITICAL_EXIT();
+#endif
+
 		step_motor_start(s_motor);  // 确保 PWM 已启动
 		device_err_t ret = step_motor_set_speed(s_motor, rpm, dir);
 		if (ret == DRV_OK) {
@@ -315,6 +389,7 @@ static void execute_cmd(const cmd_t* cmd)
 		send_ok();
 		break;
 	}
+#if USE_MOTOR_PID_CONTROL==1
 	// 自动调参开始命令
 	case CMD_AUTOTUNE_START: {
 		// 停止电机，重置调参器，启动调参模式
@@ -353,7 +428,7 @@ static void execute_cmd(const cmd_t* cmd)
 		SEND_STR(buf);
 		break;
 	}
-#if USE_MOTOR_PID_CONTROL==1
+
 	// PID 设置目标和参数进行调参
 	case CMD_PID_SETTING: {
 		// X:<target>,<kp>,<ki>,<kd>
@@ -388,6 +463,43 @@ static void execute_cmd(const cmd_t* cmd)
 	}
 #endif
 
+	case CMD_POS_PID_SETTING: {
+		// E:<kp>,<ki>,<kd>  位移环
+		float kp = cmd->param3, ki = cmd->param4, kd = cmd->param5;
+		control_set_pid_x(kp, ki, kd);
+		char buf[96];
+		snprintf(buf, sizeof(buf), "PID_X SET Kp=%.4f Ki=%.4f Kd=%.4f\r\n",
+		         (double)kp, (double)ki, (double)kd);
+		SEND_STR(buf);
+		break;
+	}
+
+	case CMD_ANGLE_PID_SETTING: {
+		// F:<kp>,<ki>,<kd>  角度环
+		float kp = cmd->param3, ki = cmd->param4, kd = cmd->param5;
+		control_set_pid_theta(kp, ki, kd);
+		char buf[96];
+		snprintf(buf, sizeof(buf), "PID_T SET Kp=%.4f Ki=%.4f Kd=%.4f\r\n",
+		         (double)kp, (double)ki, (double)kd);
+		SEND_STR(buf);
+		break;
+	}
+
+	case CMD_ANGLE_VELOCITY_PID_SETTING: {
+		// G:<kp>,<ki>,<kd>  角速度环
+		float kp = cmd->param3, ki = cmd->param4, kd = cmd->param5;
+		control_set_pid_theta_dot(kp, ki, kd);
+		char buf[96];
+		snprintf(buf, sizeof(buf), "PID_TD SET Kp=%.4f Ki=%.4f Kd=%.4f\r\n",
+		         (double)kp, (double)ki, (double)kd);
+		SEND_STR(buf);
+		break;
+	}
+
+	case CMD_QUERY_PID:
+		control_query_pid();
+		break;
+
 	case CMD_HELP:
 		cmd_send_help(s_uart);
 		break;
@@ -409,7 +521,6 @@ static void execute_cmd(const cmd_t* cmd)
 			SEND_STR("CALIB: start, seeking right limit...\r\n");
 			break;
 	}
-
 	case CMD_PENDULUM_SWING: {
 			if (s_pendulum == NULL) {
 				send_err("pendulum not initialized");
@@ -442,11 +553,4 @@ static void send_err(const char* reason)
 	SEND_STR("ERR:");
 	SEND_STR(reason);
 	SEND_STR("\r\n");
-}
-
-static void send_float(float val)
-{
-	char buf[32];
-	snprintf(buf, sizeof(buf), "%.3f\r\n", val);
-	SEND_STR(buf);
 }
