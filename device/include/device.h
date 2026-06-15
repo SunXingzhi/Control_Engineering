@@ -181,4 +181,21 @@ static inline float rpm_to_omega(float rpm)
 	return rpm * (2.0f * PI / 60.0f);
 }
 
+
+/**
+ *
+ * @param left_limited_rad 滑台左侧限位弧度值(total_angle)
+ * @param right_limted_rad 滑台右侧限位弧度值
+ * @return
+ */
+float get_positional_scale(float left_limited_rad, float right_limted_rad, float slide_table_safety_stroke);
+
+/**
+ *
+ * @param current_absolute_angle_rad 当前绝对角度弧度值(total_angle)
+ * @param midnight_angle_rad 相对坐标零点坐标值
+ * @return 基于该坐标系下的位置坐标
+ */
+float get_linear_position(float current_absolute_angle_rad, float midnight_angle_rad, float position_scale);
+
 #endif //TWO_LINK_PUBLIC_RULE_H

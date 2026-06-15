@@ -24,7 +24,6 @@
 #include "tim.h"
 #include "usart.h"
 #include "gpio.h"
-#include "stm32f1xx_it.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -114,7 +113,7 @@ AngleSensor sensor1 = {0};
 
 // 自动调参实例（ISR 读写，需通过临界区保护多字节访问）
 volatile PID_AutoTune_t tuner;
-volatile uint8_t auto_tune_active = 0;  // 1=调参模式, 0=正常PID模式
+volatile uint8_t auto_tune_active = 0; // 1=调参模式, 0=正常PID模式
 
 // 波形数据共享变量（ISR 写，主循环读）
 volatile float g_wave_target = 0;
@@ -184,8 +183,6 @@ int main(void)
 	                 0.4f);
 
 	float anglesensor = 0.0f;
-
-	/* USER CODE END 2 */
 	// 初始化自动调参（默认关闭，通过串口命令启动）
 	PID_AutoTune_Init((PID_AutoTune_t*)&tuner,
 				PRESET_AUTOTUNE_AMPLITUDE,
@@ -198,14 +195,12 @@ int main(void)
 	// 控制器初始化
 	control_init();
 	// cmd_parser_set_pendulum(&pendulum);
-
 	/* USER CODE END 2 */
 
 	/* Infinite loop */
 	/* USER CODE BEGIN WHILE */
 	uint32_t last_print_ms = 0;
 	while (1){
-		/* USER CODE END WHILE */
 		cmd_pendulum_loop();
 		// 控制器开始
 		CONTROL_proc();
@@ -216,7 +211,7 @@ int main(void)
 
 		// 调试打印：每 200ms 输出一次角度传感器数据
 		uint32_t now_ms = HAL_GetTick();
-		if (now_ms - last_print_ms >= 200) {
+		if (now_ms - last_print_ms >= 200){
 			last_print_ms = now_ms;
 			uint32_t raw = AngleSensor_ReadRaw(&sensor1);
 			char buf_a[16], buf_e[16];
@@ -228,6 +223,9 @@ int main(void)
 
 		// 起摆状态机
 		pendulum_loop(&pendulum, total_angle, anglesensor);
+		/* USER CODE END WHILE */
+
+		/* USER CODE BEGIN 3 */
 	}
 	/* USER CODE END 3 */
 }

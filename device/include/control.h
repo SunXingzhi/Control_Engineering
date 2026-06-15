@@ -1,14 +1,13 @@
+/**
+* @file   control.h
+ * @brief  倒立摆平衡控制器 — 串级PID (位移环→角度环→角速度环)
+ */
 #ifndef CONTROL_H
 #define CONTROL_H
 
 #include <stdint.h>
 
 
-
-/**
- * @file   control.h
- * @brief  倒立摆平衡控制器 — 串级PID (位移环→角度环→角速度环)
- */
 
 /* 初始化平衡控制系统 */
 void control_init(void);

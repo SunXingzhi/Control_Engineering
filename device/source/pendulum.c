@@ -17,10 +17,11 @@
 #include <string.h>
 
 #include "cmd_parser.h"
+// #include "control.h"
 
 /* 外部变量（定义在 main.c 中）*/
 extern step_motor_t motor;
-extern mt6701_t encorder; /* 注意：main.c 中变量名为 encorder */
+extern mt6701_t encoder;
 extern AngleSensor sensor1;
 extern uart_base_t uart1;
 extern volatile uint8_t g_limit_right_flag;
@@ -109,6 +110,7 @@ static void do_calibration(pendulum_ctx_t* ctx)
 			ctx->calib.limit_center = (ctx->calib.limit_left + ctx->calib.limit_right) / 2.0f;
 			ctx->calib.calibrated = 1;
 			ctx->calib_phase = 2;
+			// 打印校准结果
 			{
 				char b1[16], b2[16], b3[16];
 				printf("CALIB: left=%s right=%s center=%s\r\n",
@@ -116,6 +118,17 @@ static void do_calibration(pendulum_ctx_t* ctx)
 				       ftoa_lite(b2, ctx->calib.limit_right, 2),
 				       ftoa_lite(b3, ctx->calib.limit_center, 2));
 			}
+			// 计算比例尺
+			extern float position_scale;
+			position_scale	= get_positional_scale(ctx->calib.limit_left,
+								ctx->calib.limit_right,
+								position_scale);
+			// 获取中心x_ref
+			extern float x_ref;
+			x_ref	= get_linear_position(ctx->calib.limit_center,
+							ctx->calib.limit_left,
+								x_ref);
+
 		}
 		break;
 

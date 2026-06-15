@@ -2,6 +2,7 @@
 #include "PID.h"
 #include "angle_sensor.h"
 #include "mt6701.h"
+#include "pendulum.h"
 #include "../include/driver_step_motor.h"
 #include "qmath.h"
 
@@ -15,26 +16,25 @@ static uint8_t debug_stream = 0;      // 实时数据流开关
 
 // 倒立摆参数
 static const float	g		= 9.8f;		// m/s^2    重力加速度
-static const float 	l		= 0.10f;	// m        摆杆半长
+static const float 	l		= 0.20f;	// m        摆杆半长
 static const float 	rw		= 0.00636f;	// m        同步轮半径
-static float		x_ref		= 0.0f;		// m        摆位移参考值（直线模组中点）
+float			x_ref		= 0.0f;		// m TODO   摆位移参考值（直线模组中点, 校准模式时需要确定）
 static float		v_ref		= 0.0f;		// m/s      期望线速度（加速度积分累加）
 static uint64_t		last_timeus	= 0;		// us       上次控制循环时间戳
 const float		max_rpm		= 420.0f;	// rpm      步进电机最大转速
 static float		center_angle	= 180.0f;	// °        摆杆竖直时的传感器角度(中心角度)
+const float		slide_table_safety_stroke	= 1.0f;	// TODO 滑台安全行程
+
+// 标定比例尺
+float position_scale	= 0.0f;		// 将磁编码器获取的total_angle,转成要的目标位置的比例尺
 
 // 外部变量
 extern AngleSensor	sensor1;
-extern mt6701_t		encorder;
+extern mt6701_t		encoder;
 extern step_motor_t	motor;
+extern pendulum_ctx_t pendulum;
 
-/**
- * @brief 获取平台直线位移 (m)，通过编码器累计角度 × 同步轮半径
- */
-static float get_linear_position(void)
-{
-	return encorder.sensor.angle_total * rw;
-}
+
 
 /**
  * @brief 获取平台直线速度 (m/s)，通过编码器角速度(RPM) × 同步轮半径
@@ -42,7 +42,7 @@ static float get_linear_position(void)
 static float get_linear_speed(void)
 {
 	// encorder.sensor.speed 单位是 RPM，转换为 rad/s 再乘以半径
-	return encorder.sensor.speed * (2.0f * 3.1415926f / 60.0f) * rw;
+	return encoder.sensor.speed * (2.0f * 3.1415926f / 60.0f) * rw;
 }
 
 /**
@@ -83,6 +83,7 @@ static void control_set_motor(float rpm, motor_direction_t dir)
 	}
 }
 
+// 控制器初始化
 void control_init()
 {
 	// 初始化角度环的PID (输入角度, 输出角速度, 限幅 ±4π rad/s ≈ ±12.57)
@@ -95,11 +96,13 @@ void control_init()
 	PID_init(&PID_x, PID_POSITIONAL, NULL, 2.0f, 0.1f, 1.0f, +0.15f, -0.15f);
 }
 
+
 void control_changelp(float new_lp)
 {
 	// lp = new_lp;
 }
 
+// 控制器进程
 void CONTROL_proc()
 {
 	if (!balance_enabled) return;
@@ -124,8 +127,10 @@ void CONTROL_proc()
 	float theta = (AngleSensor_GetAngle(&sensor1) - center_angle) * 0.0174533f;
 	float theta_dot = AngleSensor_GetAngularVelocity(&sensor1) * 0.0174533f;
 
-	// 位移环step1_获取当前位移
-	float x = get_linear_position();
+	// 位移环step1_获取当前位移(左侧为相对坐标零点)
+	float x = get_linear_position(pendulum.total_angle,
+					pendulum.calib.limit_left,
+							position_scale);
 
 	// 位移环step2_控制倒立摆的位移
 	PID_x.Target = x_ref; // 设置期望位置（x_ref 是全局变量，通常是直线模组的中点位置）
@@ -150,7 +155,7 @@ void CONTROL_proc()
 	float theta_dot_dot_ref = PID_calc(&PID_theta_dot, theta_dot);
 
 	// 倒立摆step6_倒立摆的逆解算
-	// ẍ = (g·sin(θ) - l·θ̈) / cos(θ)，用半长 l，θ=±90° 时 cos≈0 需保护
+	// ẍ = (g·sin(θ) - l·θ̈) / cos(θ)，用l，θ=±90° 时 cos≈0 需保护
 	float cos_theta = qcos_rad(theta);
 	if (self_fabs(cos_theta) < 0.01f) cos_theta = 0.01f;
 	float x_dot_dot_ref = (g * qsin_rad(theta) - theta_dot_dot_ref * l) / cos_theta;
