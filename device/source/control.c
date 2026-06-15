@@ -1,32 +1,86 @@
 #include "../include/control.h"
 #include "PID.h"
 #include "angle_sensor.h"
-#include <math.h>
+#include "mt6701.h"
+#include "../include/driver_step_motor.h"
 #include "qmath.h"
 
-static PID_t PID_theta;	     // θ角度环的PID
-static PID_t PID_theta_dot;     // θ.角速度环的PID
-static PID_t PID_x;	         // x位置环的PID
+PID_t PID_theta; // θ角度环的PID
+PID_t PID_theta_dot; // θ.角速度环的PID
+PID_t PID_x; // x位置环的PID
 
-static const float g = 9.8;	 // m/s^2    重力加速度
-static const float lp = 0.20;	 // m        高度const(一阶摆的摆长)
-static const float rw = 0.006;	 // m        同步轮半径
-static float omega_ref = 0.0f;	 // rad      角度参考值reference
-static float x_ref = 0.0f;	 // m        摆位移参考值 按理说是直线模组的中点
-static float v_ref = 0.0f;	 // m/s      期望线速度
-static uint64_t last_timeus = 0; // us   记录时间
-const float max_rpm = 600.0f;	 // rpm      步进电机的最大转速 测量得到的
+// 倒立摆参数
+static const float	g		= 9.8f;		// m/s^2    重力加速度
+static const float 	l		= 0.10f;	// m        摆杆半长
+static const float 	rw		= 0.006f;	// m        同步轮半径
+static float		x_ref		= 0.0f;		// m        摆位移参考值（直线模组中点）
+static float		v_ref		= 0.0f;		// m/s      期望线速度（加速度积分累加）
+static uint64_t		last_timeus	= 0;		// us       上次控制循环时间戳
+const float		max_rpm		= 420.0f;	// rpm      步进电机最大转速
+static float		center_angle	= 180.0f;	// °        摆杆竖直时的传感器角度(中心角度)
 
-// 这里的两个函数是电机提供的测量直线速度和位移的函数
-// 这里只做声明 后面替换
-float get_linear_position(void); // 单位：m
-float get_linear_speed(void);	 // 单位：m/s
+// 外部变量
+extern AngleSensor	sensor1;
+extern mt6701_t		encorder;
+extern step_motor_t	motor;
 
-extern AngleSensor sensor1;
+/**
+ * @brief 获取平台直线位移 (m)，通过编码器累计角度 × 同步轮半径
+ */
+static float get_linear_position(void)
+{
+	return encorder.sensor.angle_total * rw;
+}
+
+/**
+ * @brief 获取平台直线速度 (m/s)，通过编码器角速度(RPM) × 同步轮半径
+ */
+static float get_linear_speed(void)
+{
+	// encorder.sensor.speed 单位是 RPM，转换为 rad/s 再乘以半径
+	return encorder.sensor.speed * (2.0f * 3.1415926f / 60.0f) * rw;
+}
+
+/**
+ * @brief PID 专用电机输出 — 直接设频率，带启动频率保护和斜率限制
+ * @param rpm  目标转速（绝对值）
+ * @param dir  方向
+ * @note  不经过 ramp 状态机，避免每次重置导致 PID 跟踪失效
+ */
+static void control_set_motor(float rpm, motor_direction_t dir)
+{
+	/* 1. RPM → 频率 (Hz) */
+	uint16_t target_freq = motor_speed_to_freq(self_fabs(rpm),
+	                           motor.step_motor_information.step_model);
+
+	/* 2. 频率钳位 */
+	if (target_freq > MAX_PWM_FREQUENCY_HZ)
+		target_freq = MAX_PWM_FREQUENCY_HZ;
+
+	/* 3. 启动频率保护：非零时不低于 MIN_START_FREQ */
+	if (target_freq > 0 && target_freq < MIN_START_FREQ)
+		target_freq = MIN_START_FREQ;
+
+	/* 4. 斜率限制：每 5ms 周期最多变化 MOTOR_STEP_LENGTH_FREQUENCY_HZ (210Hz) */
+	static uint16_t current_freq = 0;
+	int16_t diff = (int16_t)target_freq - (int16_t)current_freq;
+	int16_t max_step = MOTOR_STEP_LENGTH_FREQUENCY_HZ;  // 210
+	if (diff > max_step)       diff = max_step;
+	else if (diff < -max_step) diff = -max_step;
+	current_freq = (uint16_t)((int16_t)current_freq + diff);
+
+	/* 5. 直接控制硬件，绕过 ramp 状态机 */
+	if (current_freq == 0) {
+		step_motor_pwm_off(&motor);
+	} else {
+		step_motor_set_direction(&motor, dir);
+		step_motor_set_pulse_freq(&motor, current_freq);
+		step_motor_start(&motor);
+	}
+}
 
 void control_init()
 {
-
 	// 初始化角度环的PID (输入角度, 输出角速度, 限幅 ±4π rad/s ≈ ±12.57)
 	PID_init(&PID_theta, PID_POSITIONAL, NULL, 3.1f, 3.1f, 0.3f, +12.57f, -12.57f);
 
@@ -39,13 +93,11 @@ void control_init()
 
 void control_changelp(float new_lp)
 {
-
 	// lp = new_lp;
 }
 
 void CONTROL_proc()
 {
-
 	// 下次程序运行的时间
 	static uint32_t next = 0;
 
@@ -62,17 +114,15 @@ void CONTROL_proc()
 	float deltaT = (nowus - last_timeus) / 1000000.0f;
 
 	// 倒立摆step2_读取角位移传感器的数据，角度转弧度rad/s
-	// 这个地方的角度读取可能需要改，由于规定摆竖直向上时为0度？，下面两条代码需要选择一条进行运行
-	// float theta = get_angle() * 0.0174533f;  // / 180 * pi = 0.0174533  这个的意思也就是说函数直接返回的数值是角度
-	float theta = (AngleSensor_GetAngle(&sensor1) - 180.0f) * 0.0174533f; // 倒立点 = 0 rad 而我们的角度传感器垂直向下是是0度，竖直向上是应该是180度，所以这里需要-180
+	// θ = (传感器角度 - 竖直角度) 转弧度，竖直时 θ=0，右倾为负，左倾为正
+	float theta = (AngleSensor_GetAngle(&sensor1) - center_angle) * 0.0174533f;
 	float theta_dot = AngleSensor_GetAngularVelocity(&sensor1) * 0.0174533f;
 
-	// 位移环step1_获取当前位移和线速度 可以通过电机的实际转速 + 同步轮 得到
-	float x = get_linear_position();  // 新增：摆的实际位置
-	float x_dot = get_linear_speed(); // 新增：摆的实际速度
+	// 位移环step1_获取当前位移
+	float x = get_linear_position();
 
 	// 位移环step2_控制倒立摆的位移
-	PID_x.Target = x_ref;                  // 设置期望位置（x_ref 是全局变量，通常是直线模组的中点位置）
+	PID_x.Target = x_ref; // 设置期望位置（x_ref 是全局变量，通常是直线模组的中点位置）
 	float theta_ref = PID_calc(&PID_x, x); // 这里 FB 是实际位置 x，计算后得到期望倾角
 
 	// 位移环step3_对theta_ref做额外限幅
@@ -94,34 +144,28 @@ void CONTROL_proc()
 	float theta_dot_dot_ref = PID_calc(&PID_theta_dot, theta_dot);
 
 	// 倒立摆step6_倒立摆的逆解算
-	float x_dot_dot_ref = (g * qsin_rad(theta) - theta_dot_dot_ref * lp) / qcos_rad(theta);
+	// ẍ = (g·sin(θ) - l·θ̈) / cos(θ)，用半长 l，θ=±90° 时 cos≈0 需保护
+	float cos_theta = qcos_rad(theta);
+	if (self_fabs(cos_theta) < 0.01f) cos_theta = 0.01f;
+	float x_dot_dot_ref = (g * qsin_rad(theta) - theta_dot_dot_ref * l) / cos_theta;
 
-	// 倒立摆step7_计算轮胎转速.积分累加 单位转换
-	// if (last_timeus != 0){
-	//    omega_ref += 1.0f / rw * x_dot_dot_ref * deltaT;
-	//}
-
-	// 倒立摆step7_计算同步轮转速.积分累加 单位转换
-	if (last_timeus != 0)
-	{
-		v_ref += x_dot_dot_ref * deltaT; // 加速度积分得到线速度
+	// 倒立摆step7_加速度积分得到线速度
+	if (last_timeus != 0){
+		v_ref += x_dot_dot_ref * deltaT;
 	}
 
-	float omega_ref = v_ref / rw; // 同步轮角速度 (rad/s)
-	float motor_speed_rpm = omega_ref * 60.0f / (2.0f * 3.1415926f);
+	// 线速度 → 同步轮角速度 → 电机 RPM
+	float omega_ref_local = v_ref / rw;
+	float motor_speed_rpm = omega_ref_local * 60.0f / (2.0f * 3.1415926f);
 	// 限幅：防止电机转速超过实际可承受范围，避免丢步
 	if (motor_speed_rpm > max_rpm)
 		motor_speed_rpm = max_rpm;
 	if (motor_speed_rpm < -max_rpm)
 		motor_speed_rpm = -max_rpm;
 
-	// 倒立摆step8_设置同步轮(电机)的转速
-	// 这里先留着，等待步进电机算完了再加上
-	// 设置方向（具体哪个方向为正，可能需根据安装方向试验）
-	// motor_direction_t dir = (motor_speed_rpm >= 0) ? POSITIVE_DIR : NEGATIVE_DIR;
-	// 调用步进电机驱动，传入转速绝对值 (rpm) 和方向
-	// step_motor_set_speed(&my_step_motor, (float)fabs(motor_speed_rpm), dir);
-	//
+	// 倒立摆step8_设置同步轮(电机)的转速（直接设频率，不经过 ramp）
+	motor_direction_t dir = (motor_speed_rpm >= 0) ? POSITIVE_DIR : NEGATIVE_DIR;
+	control_set_motor(motor_speed_rpm, dir);
 
 	// 倒立摆step9_更新时间值
 	last_timeus = nowus;
@@ -129,28 +173,64 @@ void CONTROL_proc()
 
 float get_omega_ref()
 {
-
-	return omega_ref;
+	return v_ref / rw;
 }
 
 uint64_t get_last_timeus()
 {
-
 	return last_timeus;
 }
 
 void control_reset()
 {
-
 	// 复位暂存值
 	last_timeus = 0;
-	omega_ref = 0;
 	v_ref = 0.0f;
 
 	// 复位PID控制器
 	PID_reset(&PID_theta);
 	PID_reset(&PID_theta_dot);
 	PID_reset(&PID_x);
+}
+
+void control_set_center_angle(float angle)
+{
+	center_angle = angle;
+}
+
+void control_set_pid_x(float kp, float ki, float kd)
+{
+	PID_x.Kp = kp;
+	PID_x.Ki = ki;
+	PID_x.Kd = kd;
+}
+
+void control_set_pid_theta(float kp, float ki, float kd)
+{
+	PID_theta.Kp = kp;
+	PID_theta.Ki = ki;
+	PID_theta.Kd = kd;
+}
+
+void control_set_pid_theta_dot(float kp, float ki, float kd)
+{
+	PID_theta_dot.Kp = kp;
+	PID_theta_dot.Ki = ki;
+	PID_theta_dot.Kd = kd;
+}
+
+void control_query_pid(void)
+{
+	printf("PID_X:   Kp=%.4f Ki=%.4f Kd=%.4f [%.2f,%.2f]\r\n",
+	       (double)PID_x.Kp, (double)PID_x.Ki, (double)PID_x.Kd,
+	       (double)PID_x.OutputMin, (double)PID_x.OutputMax);
+	printf("PID_T:   Kp=%.4f Ki=%.4f Kd=%.4f [%.2f,%.2f]\r\n",
+	       (double)PID_theta.Kp, (double)PID_theta.Ki, (double)PID_theta.Kd,
+	       (double)PID_theta.OutputMin, (double)PID_theta.OutputMax);
+	printf("PID_TD:  Kp=%.4f Ki=%.4f Kd=%.4f [%.2f,%.2f]\r\n",
+	       (double)PID_theta_dot.Kp, (double)PID_theta_dot.Ki, (double)PID_theta_dot.Kd,
+	       (double)PID_theta_dot.OutputMin, (double)PID_theta_dot.OutputMax);
+	printf("CENTER:  %.2f deg\r\n", (double)center_angle);
 }
 
 /**

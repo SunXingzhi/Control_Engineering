@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 
+
+
 /**
  * @file   control.h
  * @brief  倒立摆平衡控制器 — 串级PID (位移环→角度环→角速度环)
@@ -19,6 +21,32 @@ void CONTROL_proc(void);
 
 /* 复位控制器 (PID状态 + 内部变量) */
 void control_reset(void);
+
+/**
+ * @brief 设置竖直角度偏移（传感器在摆杆竖直时的角度值）
+ * @param angle 传感器角度值（度），例如 175.0 表示传感器在竖直时读数 175°
+ */
+void control_set_center_angle(float angle);
+
+/**
+ * @brief 设置位移环 PID 参数（E 命令）
+ */
+void control_set_pid_x(float kp, float ki, float kd);
+
+/**
+ * @brief 设置角度环 PID 参数（F 命令）
+ */
+void control_set_pid_theta(float kp, float ki, float kd);
+
+/**
+ * @brief 设置角速度环 PID 参数（G 命令）
+ */
+void control_set_pid_theta_dot(float kp, float ki, float kd);
+
+/**
+ * @brief 查询当前三环 PID 参数
+ */
+void control_query_pid(void);
 
 /* 获取同步轮角速度参考值 (rad/s) */
 float get_omega_ref(void);

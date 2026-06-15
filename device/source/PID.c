@@ -2,14 +2,14 @@
 #include <stddef.h>
 
 
-PID_t*	pid	= NULL;
+// PID_t*	pid	= NULL;
 extern const PID_AlgoInterface_t PID_INCREMENTAL_OPS;
 extern const PID_AlgoInterface_t PID_POSITIONAL_OPS;
 
 // 算法注册表
 static const PID_AlgoInterface_t* algo_table[] = {
-	[PID_POSITIONAL]  = &PID_POSITIONAL_OPS,
-	[PID_INCREMENTAL] = &PID_INCREMENTAL_OPS,
+	[PID_POSITIONAL]  = &PID_POSITIONAL_OPS,	// 角度传感器PID
+	[PID_INCREMENTAL] = &PID_INCREMENTAL_OPS,	// 电机PID
 };
 
 /**

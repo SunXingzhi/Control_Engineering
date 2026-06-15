@@ -391,7 +391,6 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* htim)
 											motor->step_motor_information.step_model);
 #if USE_MOTOR_PID_CONTROL==1
 		pid_control_tick(find_motor_by_tim(htim));
-#endif
 		// 波形输出：打印目标值和实际值
 		extern volatile uint8_t g_wave_ready;
 		extern volatile float g_wave_target;
@@ -405,6 +404,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* htim)
 			g_wave_actual = g_dev->sensor.speed;
 			g_wave_ready = 1;
 		}
+#endif
 	}
 }
 

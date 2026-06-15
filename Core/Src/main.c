@@ -29,8 +29,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "../../device/include/driver_step_motor.h"
-#include "../../device/include/test_step_motor.h"
-#include "../../device/include/test_cmd_motor.h"
+// #include "../../device/include/test_cmd_motor.h"
 #include "../../device/include/auto_tune.h"
 #include "../../device/include/mt6701.h"
 #include "../../device/include/uart.h"
@@ -174,8 +173,6 @@ int main(void)
 	}
 
 	float total_angle = 0.0f;
-	float angle = 0.0f;
-	float speed = 0.0f;
 
 	/* 初始化角度传感器 */
 	AngleSensor_Init(&sensor1,
@@ -198,10 +195,10 @@ int main(void)
 	// 精细定时器初始化
 	DWT_Init();
 	// 初始化串口命令测试
-	test_cmd_motor_init(&motor, &uart1);
+	cmd_pendulum_init(&motor, &uart1, &pendulum);
 	// 控制器初始化
-	// control_init();
-	cmd_parser_set_pendulum(&pendulum);
+	control_init();
+	// cmd_parser_set_pendulum(&pendulum);
 
 	/* USER CODE END 2 */
 
@@ -210,9 +207,9 @@ int main(void)
 	uint32_t last_print_ms = 0;
 	while (1){
 		/* USER CODE END WHILE */
-		test_cmd_motor_loop();
+		cmd_pendulum_loop();
 		// 控制器开始
-		//CONTROL_proc();
+		CONTROL_proc();
 		// 更新读取角度
 		angle_sensor_read_total_angle(&encorder, &total_angle);
 		// 更新摆杆角度传感器
