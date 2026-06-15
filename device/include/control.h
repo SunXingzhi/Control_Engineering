@@ -48,6 +48,23 @@ void control_set_pid_theta_dot(float kp, float ki, float kd);
  */
 void control_query_pid(void);
 
+/**
+ * @brief 启停平衡控制器
+ * @param enable 1=启用, 0=停用
+ */
+void control_set_enabled(uint8_t enable);
+
+/**
+ * @brief 查询平衡控制器是否启用
+ */
+uint8_t control_is_enabled(void);
+
+/**
+ * @brief 开关实时数据流（5ms 周期打印 θ/θ̇/x/motor_rpm）
+ * @param enable 1=开启, 0=关闭
+ */
+void control_set_debug_stream(uint8_t enable);
+
 /* 获取同步轮角速度参考值 (rad/s) */
 float get_omega_ref(void);
 

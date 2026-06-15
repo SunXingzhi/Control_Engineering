@@ -9,10 +9,14 @@ PID_t PID_theta; // θ角度环的PID
 PID_t PID_theta_dot; // θ.角速度环的PID
 PID_t PID_x; // x位置环的PID
 
+// 调试控制
+static uint8_t balance_enabled = 0;   // 平衡控制器启停标志
+static uint8_t debug_stream = 0;      // 实时数据流开关
+
 // 倒立摆参数
 static const float	g		= 9.8f;		// m/s^2    重力加速度
 static const float 	l		= 0.10f;	// m        摆杆半长
-static const float 	rw		= 0.006f;	// m        同步轮半径
+static const float 	rw		= 0.00636f;	// m        同步轮半径
 static float		x_ref		= 0.0f;		// m        摆位移参考值（直线模组中点）
 static float		v_ref		= 0.0f;		// m/s      期望线速度（加速度积分累加）
 static uint64_t		last_timeus	= 0;		// us       上次控制循环时间戳
@@ -98,6 +102,8 @@ void control_changelp(float new_lp)
 
 void CONTROL_proc()
 {
+	if (!balance_enabled) return;
+
 	// 下次程序运行的时间
 	static uint32_t next = 0;
 
@@ -150,6 +156,7 @@ void CONTROL_proc()
 	float x_dot_dot_ref = (g * qsin_rad(theta) - theta_dot_dot_ref * l) / cos_theta;
 
 	// 倒立摆step7_加速度积分得到线速度
+	// 纯积分，PID 积分项会自动补偿漂移
 	if (last_timeus != 0){
 		v_ref += x_dot_dot_ref * deltaT;
 	}
@@ -166,6 +173,16 @@ void CONTROL_proc()
 	// 倒立摆step8_设置同步轮(电机)的转速（直接设频率，不经过 ramp）
 	motor_direction_t dir = (motor_speed_rpm >= 0) ? POSITIVE_DIR : NEGATIVE_DIR;
 	control_set_motor(motor_speed_rpm, dir);
+
+	// 调试数据流：θ, θ̇, x, motor_rpm（适合串口绘图器）
+	if (debug_stream) {
+		char b1[16], b2[16], b3[16], b4[16];
+		printf("%s,%s,%s,%s\r\n",
+		       ftoa_lite(b1, theta, 4),
+		       ftoa_lite(b2, theta_dot, 4),
+		       ftoa_lite(b3, x, 4),
+		       ftoa_lite(b4, motor_speed_rpm, 1));
+	}
 
 	// 倒立摆step9_更新时间值
 	last_timeus = nowus;
@@ -221,20 +238,42 @@ void control_set_pid_theta_dot(float kp, float ki, float kd)
 
 void control_query_pid(void)
 {
-	printf("PID_X:   Kp=%.4f Ki=%.4f Kd=%.4f [%.2f,%.2f]\r\n",
-	       (double)PID_x.Kp, (double)PID_x.Ki, (double)PID_x.Kd,
-	       (double)PID_x.OutputMin, (double)PID_x.OutputMax);
-	printf("PID_T:   Kp=%.4f Ki=%.4f Kd=%.4f [%.2f,%.2f]\r\n",
-	       (double)PID_theta.Kp, (double)PID_theta.Ki, (double)PID_theta.Kd,
-	       (double)PID_theta.OutputMin, (double)PID_theta.OutputMax);
-	printf("PID_TD:  Kp=%.4f Ki=%.4f Kd=%.4f [%.2f,%.2f]\r\n",
-	       (double)PID_theta_dot.Kp, (double)PID_theta_dot.Ki, (double)PID_theta_dot.Kd,
-	       (double)PID_theta_dot.OutputMin, (double)PID_theta_dot.OutputMax);
-	printf("CENTER:  %.2f deg\r\n", (double)center_angle);
+	char b1[16], b2[16], b3[16], b4[16], b5[16];
+	printf("PID_X:   Kp=%s Ki=%s Kd=%s [%s,%s]\r\n",
+	       ftoa_lite(b1, PID_x.Kp, 4), ftoa_lite(b2, PID_x.Ki, 4),
+	       ftoa_lite(b3, PID_x.Kd, 4), ftoa_lite(b4, PID_x.OutputMin, 2),
+	       ftoa_lite(b5, PID_x.OutputMax, 2));
+	printf("PID_T:   Kp=%s Ki=%s Kd=%s [%s,%s]\r\n",
+	       ftoa_lite(b1, PID_theta.Kp, 4), ftoa_lite(b2, PID_theta.Ki, 4),
+	       ftoa_lite(b3, PID_theta.Kd, 4), ftoa_lite(b4, PID_theta.OutputMin, 2),
+	       ftoa_lite(b5, PID_theta.OutputMax, 2));
+	printf("PID_TD:  Kp=%s Ki=%s Kd=%s [%s,%s]\r\n",
+	       ftoa_lite(b1, PID_theta_dot.Kp, 4), ftoa_lite(b2, PID_theta_dot.Ki, 4),
+	       ftoa_lite(b3, PID_theta_dot.Kd, 4), ftoa_lite(b4, PID_theta_dot.OutputMin, 2),
+	       ftoa_lite(b5, PID_theta_dot.OutputMax, 2));
+	printf("CENTER:  %s deg\r\n", ftoa_lite(b1, center_angle, 2));
 }
 
-/**
- * @brief  初始化 DWT 周期计数器，在 main 函数中调用 1 次即可
+void control_set_enabled(uint8_t enable)
+{
+	balance_enabled = enable;
+	if (!enable) {
+		control_reset();
+		step_motor_pwm_off(&motor);
+	}
+}
+
+uint8_t control_is_enabled(void)
+{
+	return balance_enabled;
+}
+
+void control_set_debug_stream(uint8_t enable)
+{
+	debug_stream = enable;
+}
+
+/*
  * @note   建议放在 HAL_Init() 之后、外设初始化之前调用
  */
 void DWT_Init(void)

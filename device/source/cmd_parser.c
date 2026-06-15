@@ -75,7 +75,7 @@ void cmd_send_help(uart_base_t* uart)
 	uart_base_t* prev = s_uart;
 	s_uart = uart;
 
-	SEND_STR("===================== Motor Control Commands ==================\r\n");
+	SEND_STR("===================== Pendulum Control Commands ===============\r\n");
 	SEND_STR("| S:<rpm>          		Set speed (negative=REV)	|\r\n");
 	SEND_STR("| A:<angle>        		Move angle (negative=REV)	|\r\n");
 	SEND_STR("| P                		Stop motor			|\r\n");
@@ -87,9 +87,12 @@ void cmd_send_help(uart_base_t* uart)
 	SEND_STR("| E:<kp>,<ki>,<kd>		Set pos loop PID (PID_x)	|\r\n");
 	SEND_STR("| F:<kp>,<ki>,<kd>		Set angle loop PID (PID_T)	|\r\n");
 	SEND_STR("| G:<kp>,<ki>,<kd>		Set angvel loop PID (PID_TD)	|\r\n");
+	SEND_STR("| B:<0|1>			Enable/Disable balance ctrl	|\r\n");
+	SEND_STR("| N:<angle>			Set center angle (deg)		|\r\n");
+	SEND_STR("| D:<0|1>			Enable/Disable debug stream	|\r\n");
 	SEND_STR("| I                		Query balance PID params	|\r\n");
 	SEND_STR("| H				Show this help			|\r\n");
-	SEND_STR("| C:<run mode>			Set run mode (001/002)		|\r\n");
+	SEND_STR("| C:<run mode>		Set run mode (001/002)		|\r\n");
 	SEND_STR("===============================================================\r\n");
 
 	s_uart = prev;
@@ -128,7 +131,7 @@ static cmd_t parse_cmd(const uint8_t* data, uint16_t len)
 			uint16_t rpm_len = len - 2;
 			if (rpm_len >= sizeof(rpm_str)) rpm_len = sizeof(rpm_str) - 1;
 			memcpy(rpm_str, data + 2, rpm_len);
-			cmd.param1 = strtof(rpm_str, NULL);  // rpm（可正可负）
+			cmd.param1 = strtof_lite(rpm_str);  // rpm（可正可负）
 		}
 		break;
 
@@ -140,7 +143,7 @@ static cmd_t parse_cmd(const uint8_t* data, uint16_t len)
 			uint16_t angle_len = len - 2;
 			if (angle_len >= sizeof(angle_str)) angle_len = sizeof(angle_str) - 1;
 			memcpy(angle_str, data + 2, angle_len);
-			cmd.param1 = strtof(angle_str, NULL);  // angle（可正可负）
+			cmd.param1 = strtof_lite(angle_str);  // angle（可正可负）
 		}
 		break;
 
@@ -172,6 +175,32 @@ static cmd_t parse_cmd(const uint8_t* data, uint16_t len)
 		cmd.id = CMD_AUTOTUNE_RESULT;
 		break;
 
+	case 'B':  // B:<0|1> 启停平衡控制
+	case 'b':
+		cmd.id = CMD_BALANCE_ENABLE;
+		if (len > 2 && data[1] == ':')
+			cmd.param2 = (uint8_t)atoi((const char*)(data + 2));
+		break;
+
+	case 'N':  // N:<angle> 设置竖直角度偏移
+	case 'n':
+		cmd.id = CMD_CENTER_ANGLE;
+		if (len > 2 && data[1] == ':') {
+			char tmp[16] = {0};
+			uint16_t alen = len - 2;
+			if (alen >= sizeof(tmp)) alen = sizeof(tmp) - 1;
+			memcpy(tmp, data + 2, alen);
+			cmd.param1 = strtof_lite(tmp);
+		}
+		break;
+
+	case 'D':  // D:<0|1> 开关实时数据流
+	case 'd':
+		cmd.id = CMD_DEBUG_STREAM;
+		if (len > 2 && data[1] == ':')
+			cmd.param2 = (uint8_t)atoi((const char*)(data + 2));
+		break;
+
 	case 'I':  // 查询平衡 PID 参数
 	case 'i':
 		cmd.id = CMD_QUERY_PID;
@@ -196,7 +225,7 @@ static cmd_t parse_cmd(const uint8_t* data, uint16_t len)
 				uint16_t field_len = comma ? (uint16_t)(comma - p) : remaining;
 				if (field_len >= sizeof(tmp)) field_len = sizeof(tmp) - 1;
 				memcpy(tmp, p, field_len);
-				*params[i] = strtof(tmp, NULL);
+				*params[i] = strtof_lite(tmp);
 				if (comma) {
 					p = comma + 1;
 					remaining -= (field_len + 1);
@@ -207,8 +236,8 @@ static cmd_t parse_cmd(const uint8_t* data, uint16_t len)
 		}
 		break;
 
-	case 'E':  // E:<kp>,<ki>,<kd>  位移环 PID
-	case 'e':
+	case 'G':  // E:<kp>,<ki>,<kd>  位移环 PID
+	case 'g':
 		cmd.id = CMD_POS_PID_SETTING;
 		if (len > 2 && data[1] == ':') {
 			const uint8_t* p = data + 2;
@@ -220,15 +249,15 @@ static cmd_t parse_cmd(const uint8_t* data, uint16_t len)
 				uint16_t field_len = comma ? (uint16_t)(comma - p) : remaining;
 				if (field_len >= sizeof(tmp)) field_len = sizeof(tmp) - 1;
 				memcpy(tmp, p, field_len);
-				*params[i] = strtof(tmp, NULL);
+				*params[i] = strtof_lite(tmp);
 				if (comma) { p = comma + 1; remaining -= (field_len + 1); }
 				else break;
 			}
 		}
 		break;
 
-	case 'F':  // F:<kp>,<ki>,<kd>  角度环 PID
-	case 'f':
+	case 'E':  // F:<kp>,<ki>,<kd>  角度环 PID
+	case 'e':
 		cmd.id = CMD_ANGLE_PID_SETTING;
 		if (len > 2 && data[1] == ':') {
 			const uint8_t* p = data + 2;
@@ -240,15 +269,15 @@ static cmd_t parse_cmd(const uint8_t* data, uint16_t len)
 				uint16_t field_len = comma ? (uint16_t)(comma - p) : remaining;
 				if (field_len >= sizeof(tmp)) field_len = sizeof(tmp) - 1;
 				memcpy(tmp, p, field_len);
-				*params[i] = strtof(tmp, NULL);
+				*params[i] = strtof_lite(tmp);
 				if (comma) { p = comma + 1; remaining -= (field_len + 1); }
 				else break;
 			}
 		}
 		break;
 
-	case 'G':  // G:<kp>,<ki>,<kd>  角速度环 PID
-	case 'g':
+	case 'F':  // G:<kp>,<ki>,<kd>  角速度环 PID
+	case 'f':
 		cmd.id = CMD_ANGLE_VELOCITY_PID_SETTING;
 		if (len > 2 && data[1] == ':') {
 			const uint8_t* p = data + 2;
@@ -260,7 +289,7 @@ static cmd_t parse_cmd(const uint8_t* data, uint16_t len)
 				uint16_t field_len = comma ? (uint16_t)(comma - p) : remaining;
 				if (field_len >= sizeof(tmp)) field_len = sizeof(tmp) - 1;
 				memcpy(tmp, p, field_len);
-				*params[i] = strtof(tmp, NULL);
+				*params[i] = strtof_lite(tmp);
 				if (comma) { p = comma + 1; remaining -= (field_len + 1); }
 				else break;
 			}
@@ -467,9 +496,10 @@ static void execute_cmd(const cmd_t* cmd)
 		// E:<kp>,<ki>,<kd>  位移环
 		float kp = cmd->param3, ki = cmd->param4, kd = cmd->param5;
 		control_set_pid_x(kp, ki, kd);
+		char b1[16], b2[16], b3[16];
 		char buf[96];
-		snprintf(buf, sizeof(buf), "PID_X SET Kp=%.4f Ki=%.4f Kd=%.4f\r\n",
-		         (double)kp, (double)ki, (double)kd);
+		snprintf(buf, sizeof(buf), "PID_X SET Kp=%s Ki=%s Kd=%s\r\n",
+		         ftoa_lite(b1, kp, 4), ftoa_lite(b2, ki, 4), ftoa_lite(b3, kd, 4));
 		SEND_STR(buf);
 		break;
 	}
@@ -478,9 +508,10 @@ static void execute_cmd(const cmd_t* cmd)
 		// F:<kp>,<ki>,<kd>  角度环
 		float kp = cmd->param3, ki = cmd->param4, kd = cmd->param5;
 		control_set_pid_theta(kp, ki, kd);
+		char b1[16], b2[16], b3[16];
 		char buf[96];
-		snprintf(buf, sizeof(buf), "PID_T SET Kp=%.4f Ki=%.4f Kd=%.4f\r\n",
-		         (double)kp, (double)ki, (double)kd);
+		snprintf(buf, sizeof(buf), "PID_T SET Kp=%s Ki=%s Kd=%s\r\n",
+		         ftoa_lite(b1, kp, 4), ftoa_lite(b2, ki, 4), ftoa_lite(b3, kd, 4));
 		SEND_STR(buf);
 		break;
 	}
@@ -489,9 +520,10 @@ static void execute_cmd(const cmd_t* cmd)
 		// G:<kp>,<ki>,<kd>  角速度环
 		float kp = cmd->param3, ki = cmd->param4, kd = cmd->param5;
 		control_set_pid_theta_dot(kp, ki, kd);
+		char b1[16], b2[16], b3[16];
 		char buf[96];
-		snprintf(buf, sizeof(buf), "PID_TD SET Kp=%.4f Ki=%.4f Kd=%.4f\r\n",
-		         (double)kp, (double)ki, (double)kd);
+		snprintf(buf, sizeof(buf), "PID_TD SET Kp=%s Ki=%s Kd=%s\r\n",
+		         ftoa_lite(b1, kp, 4), ftoa_lite(b2, ki, 4), ftoa_lite(b3, kd, 4));
 		SEND_STR(buf);
 		break;
 	}
@@ -499,6 +531,30 @@ static void execute_cmd(const cmd_t* cmd)
 	case CMD_QUERY_PID:
 		control_query_pid();
 		break;
+
+	case CMD_BALANCE_ENABLE: {
+		uint8_t en = cmd->param2;
+		control_set_enabled(en);
+		SEND_STR(en ? "BALANCE ON\r\n" : "BALANCE OFF\r\n");
+		break;
+	}
+
+	case CMD_CENTER_ANGLE: {
+		float angle = cmd->param1;
+		control_set_center_angle(angle);
+		char bf[16];
+		char buf[64];
+		snprintf(buf, sizeof(buf), "CENTER SET %s deg\r\n", ftoa_lite(bf, angle, 2));
+		SEND_STR(buf);
+		break;
+	}
+
+	case CMD_DEBUG_STREAM: {
+		uint8_t en = cmd->param2;
+		control_set_debug_stream(en);
+		SEND_STR(en ? "STREAM ON\r\n" : "STREAM OFF\r\n");
+		break;
+	}
 
 	case CMD_HELP:
 		cmd_send_help(s_uart);

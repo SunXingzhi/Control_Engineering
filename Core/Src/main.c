@@ -220,10 +220,11 @@ int main(void)
 		if (now_ms - last_print_ms >= 200) {
 			last_print_ms = now_ms;
 			uint32_t raw = AngleSensor_ReadRaw(&sensor1);
-			printf("ADC_RAW=%lu  ANGLE=%.2f  ENCODER=%.2f\r\n",
+			char buf_a[16], buf_e[16];
+			printf("ADC_RAW=%lu  ANGLE=%s  ENCODER=%s\r\n",
 			       (unsigned long)raw,
-			       (double)anglesensor,
-			       (double)total_angle);
+			       ftoa_lite(buf_a, anglesensor, 2),
+			       ftoa_lite(buf_e, total_angle, 2));
 		}
 
 		// 起摆状态机

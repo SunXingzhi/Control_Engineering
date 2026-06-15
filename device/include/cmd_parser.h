@@ -11,6 +11,13 @@
  *   T                   启动自动调参（继电器法）
  *   R                   查询自动调参结果
  *   X:<target>,<kp>,<ki>,<kd>  设置PID参数+目标（target可负）
+ *   E:<kp>,<ki>,<kd>    设置位移环PID
+ *   F:<kp>,<ki>,<kd>    设置角度环PID
+ *   G:<kp>,<ki>,<kd>    设置角速度环PID
+ *   B:<0|1>             启停平衡控制
+ *   N:<angle>           设置竖直角度偏移
+ *   D:<0|1>             开关实时数据流
+ *   I                   查询PID参数
  *   H                   显示帮助
  *
  * 应答:
@@ -42,6 +49,9 @@ typedef enum CMD_ID {
 	CMD_ANGLE_VELOCITY_PID_SETTING,		// F:<Kp>,<Ki>,<Kd>
 	CMD_POS_PID_SETTING,			// G:<Kp>,<Ki>,<Kd>
 	CMD_QUERY_PID,				// I
+	CMD_BALANCE_ENABLE,			// B:<0|1>
+	CMD_CENTER_ANGLE,			// N:<angle>
+	CMD_DEBUG_STREAM,			// D:<0|1>
 	CMD_HELP,				// H
 	CMD_PENDULUM_CALIB,			// C:001(校位)
 	CMD_PENDULUM_SWING,			// C:002(起摆)

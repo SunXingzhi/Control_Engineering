@@ -71,6 +71,87 @@ static inline float self_fabs(float x)
 }
 
 /**
+ * @brief  轻量字符串转浮点（替代 strtof，只处理十进制，不链接 strtod 库）
+ * @param  s  输入字符串，格式: [+-]digits[.digits]
+ * @retval float 值
+ */
+static inline float strtof_lite(const char* s)
+{
+	float sign = 1.0f;
+	float val = 0.0f;
+	float frac = 0.0f;
+	float div = 1.0f;
+
+	if (*s == '-')      { sign = -1.0f; s++; }
+	else if (*s == '+') { s++; }
+
+	while (*s >= '0' && *s <= '9') {
+		val = val * 10.0f + (float)(*s - '0');
+		s++;
+	}
+	if (*s == '.') {
+		s++;
+		while (*s >= '0' && *s <= '9') {
+			frac = frac * 10.0f + (float)(*s - '0');
+			div *= 10.0f;
+			s++;
+		}
+	}
+	return sign * (val + frac / div);
+}
+
+/**
+ * @brief  轻量浮点转字符串（纯整数运算，不链接 printf %f）
+ * @param  buf    输出缓冲区（至少 16 字节）
+ * @param  val    浮点值
+ * @param  dec    小数位数（1~4）
+ * @retval buf 指针（可直接传给 printf %s）
+ */
+static inline char* ftoa_lite(char* buf, float val, int dec)
+{
+	if (dec < 1) dec = 1;
+	if (dec > 4) dec = 4;
+
+	/* 处理负数 */
+	char* p = buf;
+	if (val < 0.0f) { *p++ = '-'; val = -val; }
+
+	/* 四舍五入 */
+	float round = 0.5f;
+	for (int i = 0; i < dec; i++) round *= 0.1f;
+	val += round;
+
+	/* 整数部分 */
+	int int_part = (int)val;
+	float frac_part = val - (float)int_part;
+
+	/* 整数转字符串（递归写法，避免数组） */
+	char int_buf[12];
+	int int_len = 0;
+	if (int_part == 0) {
+		int_buf[int_len++] = '0';
+	} else {
+		while (int_part > 0) {
+			int_buf[int_len++] = '0' + (int_part % 10);
+			int_part /= 10;
+		}
+	}
+	for (int i = int_len - 1; i >= 0; i--)
+		*p++ = int_buf[i];
+
+	/* 小数部分 */
+	*p++ = '.';
+	for (int i = 0; i < dec; i++) {
+		frac_part *= 10.0f;
+		int digit = (int)frac_part;
+		*p++ = '0' + digit;
+		frac_part -= (float)digit;
+	}
+	*p = '\0';
+	return buf;
+}
+
+/**
  * @brief  弧度转角度
  * @param  rad: 弧度值
  * @retval 角度值（°）
