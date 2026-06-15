@@ -100,11 +100,11 @@ step_motor_t motor = {
 };
 
 // MT6701 磁编码器实例
-mt6701_t encorder = {
+mt6701_t encoder = {
 	.sensor = {
 		.hspi = &hspi1,
-		.cs_gpiox = GPIOA,
-		.cs_gpio_pin = GPIO_PIN_4,
+		.cs_gpiox = MT6701_CSN_GPIO_Port,
+		.cs_gpio_pin = MT6701_CSN_Pin,
 		.htim = &htim3,
 	},
 };
@@ -114,7 +114,7 @@ AngleSensor sensor1 = {0};
 
 // 自动调参实例（ISR 读写，需通过临界区保护多字节访问）
 volatile PID_AutoTune_t tuner;
-volatile uint8_t auto_tune_active = 0; // 1=调参模式, 0=正常PID模式
+volatile uint8_t auto_tune_active = 0;  // 1=调参模式, 0=正常PID模式
 
 // 波形数据共享变量（ISR 写，主循环读）
 volatile float g_wave_target = 0;
@@ -167,8 +167,8 @@ int main(void)
 		Error_Handler();
 	}
 
-	/* 初始化编码器 */
-	if (angle_sensor_init(&encorder) != DRV_OK){
+	// 初始化 MT6701 磁编码器
+	if (angle_sensor_init(&encoder) != DRV_OK){
 		Error_Handler();
 	}
 
@@ -188,12 +188,11 @@ int main(void)
 	/* USER CODE END 2 */
 	// 初始化自动调参（默认关闭，通过串口命令启动）
 	PID_AutoTune_Init((PID_AutoTune_t*)&tuner,
-	                  PRESET_AUTOTUNE_AMPLITUDE,
-	                  PRESET_AUTOTUNE_HYSTERESIS,
-	                  PRESET_AUTOTUNE_SETPOINT,
-	                  PRESET_AUTOTUNE_CYCLES);
-	// 精细定时器初始化
-	DWT_Init();
+				PRESET_AUTOTUNE_AMPLITUDE,
+				PRESET_AUTOTUNE_HYSTERESIS,
+				PRESET_AUTOTUNE_SETPOINT,
+				PRESET_AUTOTUNE_CYCLES);
+
 	// 初始化串口命令测试
 	cmd_pendulum_init(&motor, &uart1, &pendulum);
 	// 控制器初始化
@@ -211,7 +210,7 @@ int main(void)
 		// 控制器开始
 		CONTROL_proc();
 		// 更新读取角度
-		angle_sensor_read_total_angle(&encorder, &total_angle);
+		angle_sensor_read_total_angle(&encoder, &total_angle);
 		// 更新摆杆角度传感器
 		anglesensor = AngleSensor_GetFilteredAngle(&sensor1);
 

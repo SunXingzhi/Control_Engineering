@@ -77,11 +77,11 @@ typedef struct {
 #define MOVE_ARRIVE_THRESH      2.0f    // 到达中点判定阈值
 
 /* 扰动 */
-#define DISTURB_SPEED_RPM       120.0f  // 扰动速度（RPM）
+#define DISTURB_SPEED_RPM       400.0f  // 扰动速度（RPM）
 #define DISTURB_DURATION_MS     120     // 单方向扰动持续时间(ms)
 
 /* 起摆推力 */
-#define SWING_PUSH_SPEED_RPM    80.0f   // 起摆推力速度（RPM）
+#define SWING_PUSH_SPEED_RPM    400.0f   // 起摆推力速度（RPM）
 #define SWING_PUSH_DURATION_MS  60      // 单次推力时长(ms)
 
 /* 角度阈值 */

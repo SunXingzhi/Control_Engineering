@@ -46,8 +46,9 @@ void pendulum_loop(pendulum_ctx_t* ctx, float total_angle, float pendulum_angle)
 
 	/* 限位硬件检测（安全兜底，每次都检查）*/
 	check_limit_switches(ctx);
-	if (ctx->limit_tripped && ctx->state != STATE_IDLE && ctx->state != STATE_CALIB_DONE && ctx->state !=
-		STATE_CALIBRATE){
+	if (ctx->limit_tripped && ctx->state != STATE_IDLE &&
+			ctx->state != STATE_CALIB_DONE && ctx->state != STATE_CALIBRATE &&
+			ctx->state != STATE_DISTURB){
 		step_motor_stop(&motor);
 		ctx->state = STATE_IDLE;
 		printf("LIMIT: emergency stop\r\n");
@@ -107,7 +108,7 @@ static void do_calibration(pendulum_ctx_t* ctx)
 			ctx->calib.limit_left = total_angle;
 			ctx->calib.limit_center = (ctx->calib.limit_left + ctx->calib.limit_right) / 2.0f;
 			ctx->calib.calibrated = 1;
-			ctx->state = STATE_CALIB_DONE;
+			ctx->calib_phase = 2;
 			{
 				char b1[16], b2[16], b3[16];
 				printf("CALIB: left=%s right=%s center=%s\r\n",
@@ -117,6 +118,24 @@ static void do_calibration(pendulum_ctx_t* ctx)
 			}
 		}
 		break;
+
+	case 2: /* 新增：移动到中点 */
+		{
+			float error = ctx->calib.limit_center - total_angle;
+			if (self_fabs(error) < MOVE_ARRIVE_THRESH){
+				step_motor_stop(&motor);
+				ctx->state = STATE_CALIB_DONE;
+				char bf[16];
+				printf("CALIB: centered at %s, ready\r\n", ftoa_lite(bf, total_angle, 2));
+				return;
+			}
+			if (error > 0)
+				step_motor_set_speed(&motor, MOVE_SPEED_RPM, POSITIVE_DIR);
+			else
+				step_motor_set_speed(&motor, MOVE_SPEED_RPM, NEGATIVE_DIR);
+		}
+		break;
+
 	}
 }
 

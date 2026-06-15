@@ -586,8 +586,11 @@ static void execute_cmd(const cmd_t* cmd)
 				send_err("not calibrated, send C:001 first");
 				break;
 			}
-			s_pendulum->state = STATE_MOVE_MID;
-			SEND_STR("SWING: moving to center...\r\n");
+			s_pendulum->state = STATE_DISTURB;
+			s_pendulum->disturb_phase = 0;
+			s_pendulum->disturb_start_ms = HAL_GetTick();
+			step_motor_set_speed(s_motor, DISTURB_SPEED_RPM, POSITIVE_DIR);
+			SEND_STR("SWING: starting disturb...\r\n");
 			break;
 	}
 
