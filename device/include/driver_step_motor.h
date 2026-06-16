@@ -153,7 +153,7 @@ typedef struct step_motor{
 #define START_UP_PWM_FREQUENCY_HZ		1062	// 测量环境24V, 带同步轮
 #define DEFAULT_MOTOR_FREQUENCY_HZ		500	// 默认电机频率
 #define MAX_PWM_FREQUENCY_HZ			1400	// 电机测量的最大PWM频率
-#define MIN_START_FREQ				100	// 30rpm
+#define MIN_START_FREQ				500	// 30rpm
 #define MIN_START_RPM				30
 #define MOTOR_STEP_LENGTH_FREQUENCY_HZ		210
 #define	FULL_UP_STEP_LENGTH_ANGLE		1.8f	// 单位:度
@@ -180,6 +180,7 @@ static const float PWM_PULSE_TIME_MIN = 0.00001f; // A4988驱动要求STEP脉冲
 
 // 工具函数
 uint16_t motor_speed_to_freq(float motor_speed_rpm, motor_step_model_t step_model);
+uint16_t motor_freq_to_speed(const uint16_t freq, const motor_step_model_t step_model);
 uint16_t motor_freq_to_arr(uint16_t pulse_freq_hz);
 
 /* ------------------------------------------*/

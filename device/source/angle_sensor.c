@@ -5,7 +5,7 @@
 /**
  * @brief 计算当前未规范化的原始角度（已减 offset）
  */
-static float angle_sensor_get_unwrapped(AngleSensor* sensor)
+float angle_sensor_get_unwrapped(AngleSensor* sensor)
 {
     uint32_t raw = AngleSensor_ReadRaw(sensor);
     return (float)raw * sensor->k + sensor->b - sensor->offset;

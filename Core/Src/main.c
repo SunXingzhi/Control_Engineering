@@ -207,16 +207,14 @@ int main(void)
 		// 更新读取角度
 		angle_sensor_read_total_angle(&encoder, &total_angle);
 		// 更新摆杆角度传感器
-		anglesensor = AngleSensor_GetFilteredAngle(&sensor1);
+		anglesensor = AngleSensor_GetAngle(&sensor1);
 
 		// 调试打印：每 200ms 输出一次角度传感器数据
 		uint32_t now_ms = HAL_GetTick();
 		if (now_ms - last_print_ms >= 200){
 			last_print_ms = now_ms;
-			uint32_t raw = AngleSensor_ReadRaw(&sensor1);
 			char buf_a[16], buf_e[16];
-			printf("ADC_RAW=%lu  ANGLE=%s  ENCODER=%s\r\n",
-			       (unsigned long)raw,
+			printf("%s,%s\r\n",
 			       ftoa_lite(buf_a, anglesensor, 2),
 			       ftoa_lite(buf_e, total_angle, 2));
 		}

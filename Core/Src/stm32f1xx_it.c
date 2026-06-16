@@ -71,7 +71,7 @@ extern TIM_HandleTypeDef htim4;
 extern UART_HandleTypeDef huart1;
 /* USER CODE BEGIN EV */
 extern PID_AutoTune_t tuner;
-
+extern step_motor_t motor;
 /* USER CODE END EV */
 
 /******************************************************************************/
@@ -82,13 +82,13 @@ extern PID_AutoTune_t tuner;
   */
 void NMI_Handler(void)
 {
-  /* USER CODE BEGIN NonMaskableInt_IRQn 0 */
+	/* USER CODE BEGIN NonMaskableInt_IRQn 0 */
 
-  /* USER CODE END NonMaskableInt_IRQn 0 */
-  /* USER CODE BEGIN NonMaskableInt_IRQn 1 */
+	/* USER CODE END NonMaskableInt_IRQn 0 */
+	/* USER CODE BEGIN NonMaskableInt_IRQn 1 */
 	while (1){
 	}
-  /* USER CODE END NonMaskableInt_IRQn 1 */
+	/* USER CODE END NonMaskableInt_IRQn 1 */
 }
 
 /**
@@ -96,14 +96,13 @@ void NMI_Handler(void)
   */
 void HardFault_Handler(void)
 {
-  /* USER CODE BEGIN HardFault_IRQn 0 */
+	/* USER CODE BEGIN HardFault_IRQn 0 */
 
-  /* USER CODE END HardFault_IRQn 0 */
-  while (1)
-  {
-    /* USER CODE BEGIN W1_HardFault_IRQn 0 */
-    /* USER CODE END W1_HardFault_IRQn 0 */
-  }
+	/* USER CODE END HardFault_IRQn 0 */
+	while (1){
+		/* USER CODE BEGIN W1_HardFault_IRQn 0 */
+		/* USER CODE END W1_HardFault_IRQn 0 */
+	}
 }
 
 /**
@@ -111,14 +110,13 @@ void HardFault_Handler(void)
   */
 void MemManage_Handler(void)
 {
-  /* USER CODE BEGIN MemoryManagement_IRQn 0 */
+	/* USER CODE BEGIN MemoryManagement_IRQn 0 */
 
-  /* USER CODE END MemoryManagement_IRQn 0 */
-  while (1)
-  {
-    /* USER CODE BEGIN W1_MemoryManagement_IRQn 0 */
-    /* USER CODE END W1_MemoryManagement_IRQn 0 */
-  }
+	/* USER CODE END MemoryManagement_IRQn 0 */
+	while (1){
+		/* USER CODE BEGIN W1_MemoryManagement_IRQn 0 */
+		/* USER CODE END W1_MemoryManagement_IRQn 0 */
+	}
 }
 
 /**
@@ -126,14 +124,13 @@ void MemManage_Handler(void)
   */
 void BusFault_Handler(void)
 {
-  /* USER CODE BEGIN BusFault_IRQn 0 */
+	/* USER CODE BEGIN BusFault_IRQn 0 */
 
-  /* USER CODE END BusFault_IRQn 0 */
-  while (1)
-  {
-    /* USER CODE BEGIN W1_BusFault_IRQn 0 */
-    /* USER CODE END W1_BusFault_IRQn 0 */
-  }
+	/* USER CODE END BusFault_IRQn 0 */
+	while (1){
+		/* USER CODE BEGIN W1_BusFault_IRQn 0 */
+		/* USER CODE END W1_BusFault_IRQn 0 */
+	}
 }
 
 /**
@@ -141,14 +138,13 @@ void BusFault_Handler(void)
   */
 void UsageFault_Handler(void)
 {
-  /* USER CODE BEGIN UsageFault_IRQn 0 */
+	/* USER CODE BEGIN UsageFault_IRQn 0 */
 
-  /* USER CODE END UsageFault_IRQn 0 */
-  while (1)
-  {
-    /* USER CODE BEGIN W1_UsageFault_IRQn 0 */
-    /* USER CODE END W1_UsageFault_IRQn 0 */
-  }
+	/* USER CODE END UsageFault_IRQn 0 */
+	while (1){
+		/* USER CODE BEGIN W1_UsageFault_IRQn 0 */
+		/* USER CODE END W1_UsageFault_IRQn 0 */
+	}
 }
 
 /**
@@ -156,12 +152,12 @@ void UsageFault_Handler(void)
   */
 void SVC_Handler(void)
 {
-  /* USER CODE BEGIN SVCall_IRQn 0 */
+	/* USER CODE BEGIN SVCall_IRQn 0 */
 
-  /* USER CODE END SVCall_IRQn 0 */
-  /* USER CODE BEGIN SVCall_IRQn 1 */
+	/* USER CODE END SVCall_IRQn 0 */
+	/* USER CODE BEGIN SVCall_IRQn 1 */
 
-  /* USER CODE END SVCall_IRQn 1 */
+	/* USER CODE END SVCall_IRQn 1 */
 }
 
 /**
@@ -169,12 +165,12 @@ void SVC_Handler(void)
   */
 void DebugMon_Handler(void)
 {
-  /* USER CODE BEGIN DebugMonitor_IRQn 0 */
+	/* USER CODE BEGIN DebugMonitor_IRQn 0 */
 
-  /* USER CODE END DebugMonitor_IRQn 0 */
-  /* USER CODE BEGIN DebugMonitor_IRQn 1 */
+	/* USER CODE END DebugMonitor_IRQn 0 */
+	/* USER CODE BEGIN DebugMonitor_IRQn 1 */
 
-  /* USER CODE END DebugMonitor_IRQn 1 */
+	/* USER CODE END DebugMonitor_IRQn 1 */
 }
 
 /**
@@ -182,12 +178,12 @@ void DebugMon_Handler(void)
   */
 void PendSV_Handler(void)
 {
-  /* USER CODE BEGIN PendSV_IRQn 0 */
+	/* USER CODE BEGIN PendSV_IRQn 0 */
 
-  /* USER CODE END PendSV_IRQn 0 */
-  /* USER CODE BEGIN PendSV_IRQn 1 */
+	/* USER CODE END PendSV_IRQn 0 */
+	/* USER CODE BEGIN PendSV_IRQn 1 */
 
-  /* USER CODE END PendSV_IRQn 1 */
+	/* USER CODE END PendSV_IRQn 1 */
 }
 
 /**
@@ -195,13 +191,13 @@ void PendSV_Handler(void)
   */
 void SysTick_Handler(void)
 {
-  /* USER CODE BEGIN SysTick_IRQn 0 */
+	/* USER CODE BEGIN SysTick_IRQn 0 */
 
-  /* USER CODE END SysTick_IRQn 0 */
-  HAL_IncTick();
-  /* USER CODE BEGIN SysTick_IRQn 1 */
+	/* USER CODE END SysTick_IRQn 0 */
+	HAL_IncTick();
+	/* USER CODE BEGIN SysTick_IRQn 1 */
 	HAL_SYSTICK_Callback();
-  /* USER CODE END SysTick_IRQn 1 */
+	/* USER CODE END SysTick_IRQn 1 */
 }
 
 /******************************************************************************/
@@ -216,13 +212,13 @@ void SysTick_Handler(void)
   */
 void DMA1_Channel2_IRQHandler(void)
 {
-  /* USER CODE BEGIN DMA1_Channel2_IRQn 0 */
+	/* USER CODE BEGIN DMA1_Channel2_IRQn 0 */
 
-  /* USER CODE END DMA1_Channel2_IRQn 0 */
-  HAL_DMA_IRQHandler(&hdma_spi1_rx);
-  /* USER CODE BEGIN DMA1_Channel2_IRQn 1 */
+	/* USER CODE END DMA1_Channel2_IRQn 0 */
+	HAL_DMA_IRQHandler(&hdma_spi1_rx);
+	/* USER CODE BEGIN DMA1_Channel2_IRQn 1 */
 
-  /* USER CODE END DMA1_Channel2_IRQn 1 */
+	/* USER CODE END DMA1_Channel2_IRQn 1 */
 }
 
 /**
@@ -230,13 +226,13 @@ void DMA1_Channel2_IRQHandler(void)
   */
 void DMA1_Channel3_IRQHandler(void)
 {
-  /* USER CODE BEGIN DMA1_Channel3_IRQn 0 */
+	/* USER CODE BEGIN DMA1_Channel3_IRQn 0 */
 
-  /* USER CODE END DMA1_Channel3_IRQn 0 */
-  HAL_DMA_IRQHandler(&hdma_spi1_tx);
-  /* USER CODE BEGIN DMA1_Channel3_IRQn 1 */
+	/* USER CODE END DMA1_Channel3_IRQn 0 */
+	HAL_DMA_IRQHandler(&hdma_spi1_tx);
+	/* USER CODE BEGIN DMA1_Channel3_IRQn 1 */
 
-  /* USER CODE END DMA1_Channel3_IRQn 1 */
+	/* USER CODE END DMA1_Channel3_IRQn 1 */
 }
 
 /**
@@ -244,13 +240,13 @@ void DMA1_Channel3_IRQHandler(void)
   */
 void TIM3_IRQHandler(void)
 {
-  /* USER CODE BEGIN TIM3_IRQn 0 */
+	/* USER CODE BEGIN TIM3_IRQn 0 */
 
-  /* USER CODE END TIM3_IRQn 0 */
-  HAL_TIM_IRQHandler(&htim3);
-  /* USER CODE BEGIN TIM3_IRQn 1 */
+	/* USER CODE END TIM3_IRQn 0 */
+	HAL_TIM_IRQHandler(&htim3);
+	/* USER CODE BEGIN TIM3_IRQn 1 */
 
-  /* USER CODE END TIM3_IRQn 1 */
+	/* USER CODE END TIM3_IRQn 1 */
 }
 
 /**
@@ -258,13 +254,13 @@ void TIM3_IRQHandler(void)
   */
 void TIM4_IRQHandler(void)
 {
-  /* USER CODE BEGIN TIM4_IRQn 0 */
+	/* USER CODE BEGIN TIM4_IRQn 0 */
 
-  /* USER CODE END TIM4_IRQn 0 */
-  HAL_TIM_IRQHandler(&htim4);
-  /* USER CODE BEGIN TIM4_IRQn 1 */
+	/* USER CODE END TIM4_IRQn 0 */
+	HAL_TIM_IRQHandler(&htim4);
+	/* USER CODE BEGIN TIM4_IRQn 1 */
 
-  /* USER CODE END TIM4_IRQn 1 */
+	/* USER CODE END TIM4_IRQn 1 */
 }
 
 /**
@@ -272,13 +268,13 @@ void TIM4_IRQHandler(void)
   */
 void USART1_IRQHandler(void)
 {
-  /* USER CODE BEGIN USART1_IRQn 0 */
+	/* USER CODE BEGIN USART1_IRQn 0 */
 	if (uart_idle_hook(&huart1)) return;
-  /* USER CODE END USART1_IRQn 0 */
-  HAL_UART_IRQHandler(&huart1);
-  /* USER CODE BEGIN USART1_IRQn 1 */
+	/* USER CODE END USART1_IRQn 0 */
+	HAL_UART_IRQHandler(&huart1);
+	/* USER CODE BEGIN USART1_IRQn 1 */
 
-  /* USER CODE END USART1_IRQn 1 */
+	/* USER CODE END USART1_IRQn 1 */
 }
 
 /**
@@ -286,14 +282,14 @@ void USART1_IRQHandler(void)
   */
 void EXTI15_10_IRQHandler(void)
 {
-  /* USER CODE BEGIN EXTI15_10_IRQn 0 */
+	/* USER CODE BEGIN EXTI15_10_IRQn 0 */
 
-  /* USER CODE END EXTI15_10_IRQn 0 */
-  HAL_GPIO_EXTI_IRQHandler(MOTOR_LIMIT_CLOSE_Pin);
-  HAL_GPIO_EXTI_IRQHandler(MOTOR_LIMIT_REMOTE_Pin);
-  /* USER CODE BEGIN EXTI15_10_IRQn 1 */
+	/* USER CODE END EXTI15_10_IRQn 0 */
+	HAL_GPIO_EXTI_IRQHandler(MOTOR_LIMIT_CLOSE_Pin);
+	HAL_GPIO_EXTI_IRQHandler(MOTOR_LIMIT_REMOTE_Pin);
+	/* USER CODE BEGIN EXTI15_10_IRQn 1 */
 
-  /* USER CODE END EXTI15_10_IRQn 1 */
+	/* USER CODE END EXTI15_10_IRQn 1 */
 }
 
 /* USER CODE BEGIN 1 */
@@ -310,26 +306,28 @@ extern mt6701_t* g_dev;
  */
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
-    static uint32_t last_tick_close  = 0;
-    static uint32_t last_tick_remote = 0;
-    uint32_t now = HAL_GetTick();
+	static uint32_t last_tick_close = 0;
+	static uint32_t last_tick_remote = 0;
+	uint32_t now = HAL_GetTick();
 
-    if (GPIO_Pin == MOTOR_LIMIT_CLOSE_Pin) {
-        // PA11 右限位：按下时为 LOW
-        if (now - last_tick_close < LIMIT_DEBOUNCE_MS) return;  // 消抖
-        last_tick_close = now;
-        if (HAL_GPIO_ReadPin(MOTOR_LIMIT_CLOSE_GPIO_Port, MOTOR_LIMIT_CLOSE_Pin) == GPIO_PIN_RESET) {
-            g_limit_right_flag = 1;
-        }
-    }
-    else if (GPIO_Pin == MOTOR_LIMIT_REMOTE_Pin) {
-        // PA12 左限位：按下时为 LOW
-        if (now - last_tick_remote < LIMIT_DEBOUNCE_MS) return;  // 消抖
-        last_tick_remote = now;
-        if (HAL_GPIO_ReadPin(MOTOR_LIMIT_REMOTE_GPIO_Port, MOTOR_LIMIT_REMOTE_Pin) == GPIO_PIN_RESET) {
-            g_limit_left_flag = 1;
-        }
-    }
+	if (GPIO_Pin == MOTOR_LIMIT_CLOSE_Pin){
+		// PA11 右限位：按下时为 LOW
+		if (now - last_tick_close < LIMIT_DEBOUNCE_MS) return; // 消抖
+		last_tick_close = now;
+		if (HAL_GPIO_ReadPin(MOTOR_LIMIT_CLOSE_GPIO_Port, MOTOR_LIMIT_CLOSE_Pin) == GPIO_PIN_RESET){
+			g_limit_right_flag = 1;
+			step_motor_pwm_off(&motor);
+		}
+	}
+	else if (GPIO_Pin == MOTOR_LIMIT_REMOTE_Pin){
+		// PA12 左限位：按下时为 LOW
+		if (now - last_tick_remote < LIMIT_DEBOUNCE_MS) return; // 消抖
+		last_tick_remote = now;
+		if (HAL_GPIO_ReadPin(MOTOR_LIMIT_REMOTE_GPIO_Port, MOTOR_LIMIT_REMOTE_Pin) == GPIO_PIN_RESET){
+			g_limit_left_flag = 1;
+			step_motor_pwm_off(&motor);
+		}
+	}
 }
 
 /* ======================== 注册 / 查找 ======================== */
@@ -387,8 +385,8 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* htim)
 		step_motor_t* motor = find_motor_by_tim(htim);
 		if (motor == NULL) return;
 		// 更新电机当前频率
-		motor->step_motor_information.current_frequency	= motor_speed_to_freq(g_dev->sensor.speed,
-											motor->step_motor_information.step_model);
+		motor->step_motor_information.current_frequency = motor_speed_to_freq(g_dev->sensor.speed,
+			motor->step_motor_information.step_model);
 #if USE_MOTOR_PID_CONTROL==1
 		pid_control_tick(find_motor_by_tim(htim));
 		// 波形输出：打印目标值和实际值
@@ -409,26 +407,26 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* htim)
 }
 
 #if !defined(USE_FREE_RTOS)
-	#if USE_MOTOR_PID_CONTROL==0
-		/**
-		 * @brief  SysTick 每 1ms 回调 → 每 5ms 驱动一次斜坡状态机
-		 *         HAL_IncTick() → HAL_SYSTICK_Callback() 由中断自动调用
-		 */
-		extern step_motor_t motor;
-		void HAL_SYSTICK_Callback(void)
-		{
-			static uint8_t tick_cnt = 0;
-			if (++tick_cnt >= 5){
-				tick_cnt = 0;
-				ramp_step_motor_tick(&motor.ramp, &motor);
-			}
-		}
-	#elif USE_MOTOR_PID_CONTROL==1
-		void HAL_SYSTICK_Callback(void)
-		{
-			// 相关裸机...
+#if USE_MOTOR_PID_CONTROL==0
+/**
+ * @brief  SysTick 每 1ms 回调 → 每 5ms 驱动一次斜坡状态机
+ *         HAL_IncTick() → HAL_SYSTICK_Callback() 由中断自动调用
+ */
+extern step_motor_t motor;
 
-		}
-	#endif
+void HAL_SYSTICK_Callback(void)
+{
+	static uint8_t tick_cnt = 0;
+	if (++tick_cnt >= 5){
+		tick_cnt = 0;
+		ramp_step_motor_tick(&motor.ramp, &motor);
+	}
+}
+#elif USE_MOTOR_PID_CONTROL==1
+void HAL_SYSTICK_Callback(void)
+{
+	// 相关裸机...
+}
+#endif
 #endif
 /* USER CODE END 1 */

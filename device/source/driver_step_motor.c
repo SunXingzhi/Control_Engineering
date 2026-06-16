@@ -80,7 +80,7 @@ uint16_t motor_speed_to_freq(float motor_speed_rpm, motor_step_model_t step_mode
 	frequency	= (uint16_t)(motor_speed_rpm * multiple * 10/3);
 	// 如果超过最大电机频率限制, 则限制为最大频率
 	if (frequency>MAX_PWM_FREQUENCY_HZ) return MAX_PWM_FREQUENCY_HZ;
-
+	if (frequency<MIN_START_FREQ) return MIN_START_FREQ;
 	return frequency;
 }
 

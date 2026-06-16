@@ -15,7 +15,7 @@
 #include "stm32f1xx_hal.h"
 #include "driver_step_motor.h"
 #include "uart.h"
-
+#include "main.h"
 /*========== 状态枚举 ==========*/
 typedef enum {
     STATE_IDLE = 0,       // 空闲等待指令
@@ -69,11 +69,11 @@ typedef struct {
 /*========== 可调参数宏 ==========*/
 
 /* 校准 */
-#define CALIB_SPEED_RPM         100.0f   // 校准移动速度 (RPM)
+#define CALIB_SPEED_RPM         300.0f   // 校准移动速度 (RPM)
 #define CALIB_MARGIN            5.0f    // 限位保护余量（total_angle 单位）
 
 /* 移动到中点 */
-#define MOVE_SPEED_RPM          100.0f   // 中速移动
+#define MOVE_SPEED_RPM          300.0f   // 中速移动
 #define MOVE_ARRIVE_THRESH      2.0f    // 到达中点判定阈值
 
 /* 扰动 */

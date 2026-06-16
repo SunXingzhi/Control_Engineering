@@ -63,6 +63,7 @@ void AngleSensor_Init(AngleSensor* sensor,
  */
 uint32_t AngleSensor_ReadRaw(AngleSensor* sensor);
 
+float angle_sensor_get_unwrapped(AngleSensor* sensor);
 
 /**
  * @brief 获取未经滤波的瞬时角度值（已扣除偏移量）
