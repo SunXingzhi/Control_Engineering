@@ -45,8 +45,8 @@ typedef enum CMD_ID {
 	CMD_AUTOTUNE_START,			// T
 	CMD_AUTOTUNE_RESULT,			// R
 	CMD_PID_SETTING,			// X:<target>,<Kp>,<Ki>,<Kd>
-	CMD_ANGLE_PID_SETTING,			// E:<Kp>,<Ki>,<Kd>
-	CMD_ANGLE_VELOCITY_PID_SETTING,		// F:<Kp>,<Ki>,<Kd>
+	CMD_ANGLE_VELOCITY_PID_SETTING,		// E:<Kp>,<Ki>,<Kd>(最内环)
+	CMD_ANGLE_PID_SETTING,			// F:<Kp>,<Ki>,<Kd>
 	CMD_POS_PID_SETTING,			// G:<Kp>,<Ki>,<Kd>
 	CMD_QUERY_PID,				// I
 	CMD_BALANCE_ENABLE,			// B:<0|1>

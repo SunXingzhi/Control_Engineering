@@ -113,6 +113,11 @@ float AngleSensor_GetFilteredAngle(AngleSensor* sensor)
     return normalize_angle(unwrapped, sensor->range);
 }
 
+float AngleSensor_GetFilteredAngleUnwrapped(AngleSensor* sensor)
+{
+    return angle_sensor_update_filter(sensor);
+}
+
 /**
  * @brief 获取平滑后的角速度（内部使用未规范化角度，避免环绕跳变）
  */

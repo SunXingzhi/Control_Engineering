@@ -23,7 +23,7 @@ static float		v_ref		= 0.0f;		// m/s      期望线速度（加速度积分累�
 static uint64_t		last_timeus	= 0;		// us       上次控制循环时间戳
 const float		max_rpm		= 420.0f;	// rpm      步进电机最大转速
 static float		center_angle	= 180.0f;	// °        摆杆竖直时的传感器角度(中心角度)
-const float		slide_table_safety_stroke	= 1.0f;	// TODO 滑台安全行程
+const float		slide_table_safety_stroke	= 0.45f;	// TODO 滑台安全行程(M)
 
 // 标定比例尺
 float position_scale	= 0.0f;		// 将磁编码器获取的total_angle,转成要的目标位置的比例尺
@@ -119,12 +119,14 @@ void CONTROL_proc()
 
 	// 倒立摆step7_计算轮胎转速.获取时间记录间隔
 	// 到时候需要换成hal库的获取时间函数，同时将除数从1000000.0f改为?
-	uint64_t nowus = DWT_GetTick_us();
+	uint32_t nowus = DWT_GetTick_us();
 	float deltaT = (nowus - last_timeus) / 1000000.0f;
 
 	// 倒立摆step2_读取角位移传感器的数据，角度转弧度rad/s
-	// θ = (传感器角度 - 竖直角度) 转弧度，竖直时 θ=0，右倾为负，左倾为正
-	float theta = (AngleSensor_GetAngle(&sensor1) - center_angle) * 0.0174533f;
+	// θ = (连续角度 - 竖直角度) 转弧度，竖直时 θ=0，右倾为负，左倾为正
+	// 归一化角度即可，平衡时摆杆始终在 180° 附近，不会跨 0/360 边界
+	float theta = (AngleSensor_GetFilteredAngle(&sensor1) - center_angle) * 0.0174533f;
+	// float theta = (AngleSensor_GetAngle(&sensor1) - center_angle) * 0.0174533f;
 	float theta_dot = AngleSensor_GetAngularVelocity(&sensor1) * 0.0174533f;
 
 	// 位移环step1_获取当前位移(左侧为相对坐标零点)
@@ -159,6 +161,7 @@ void CONTROL_proc()
 	float cos_theta = qcos_rad(theta);
 	if (self_fabs(cos_theta) < 0.01f) cos_theta = 0.01f;
 	float x_dot_dot_ref = (g * qsin_rad(theta) - theta_dot_dot_ref * l) / cos_theta;
+	// float x_dot_dot_ref = -(g * qsin_rad(theta) - theta_dot_dot_ref * l) / cos_theta;
 
 	// 倒立摆step7_加速度积分得到线速度
 	// 纯积分，PID 积分项会自动补偿漂移

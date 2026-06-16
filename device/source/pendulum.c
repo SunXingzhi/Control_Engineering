@@ -120,14 +120,15 @@ static void do_calibration(pendulum_ctx_t* ctx)
 			}
 			// 计算比例尺
 			extern float position_scale;
+			extern float slide_table_safety_stroke;
 			position_scale	= get_positional_scale(ctx->calib.limit_left,
 								ctx->calib.limit_right,
-								position_scale);
+								slide_table_safety_stroke);
 			// 获取中心x_ref
 			extern float x_ref;
 			x_ref	= get_linear_position(ctx->calib.limit_center,
 							ctx->calib.limit_left,
-								x_ref);
+								position_scale);
 
 		}
 		break;
@@ -274,8 +275,8 @@ static void do_swing(pendulum_ctx_t* ctx)
 	float a1 = ctx->angle_buf[idx1];
 	float a2 = ctx->angle_buf[idx2];
 
-	/* a1 是局部最大值，且已过水平面（>90°）*/
-	if (!(a1 > a0 && a1 > a2 && a1 > 90.0f)) return;
+	/* a1 是局部最大值，且已过水平面（90°~270°），排除底部绕回区 */
+	if (!(a1 > a0 && a1 > a2 && a1 > 90.0f && a1 < 270.0f)) return;
 
 	/*----- 第五步：决定推力方向 -----*/
 	ctx->swing_count++;

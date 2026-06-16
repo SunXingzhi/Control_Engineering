@@ -82,6 +82,13 @@ float AngleSensor_GetFilteredAngle(AngleSensor* sensor);
 
 
 /**
+ * @brief 获取未归一化的滤波角度（连续值，无 0°/360° 跳变）
+ * @note  用于控制算法，避免角度归一化导致 PID 输入突变
+ */
+float AngleSensor_GetFilteredAngleUnwrapped(AngleSensor* sensor);
+
+
+/**
  * @brief 获取角速度（基于滤波后角度的微分）
  * @param  sensor 传感器对象指针
  * @return 角速度，单位：度/秒

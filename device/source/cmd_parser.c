@@ -236,7 +236,7 @@ static cmd_t parse_cmd(const uint8_t* data, uint16_t len)
 		}
 		break;
 
-	case 'G':  // E:<kp>,<ki>,<kd>  位移环 PID
+	case 'G':  // G:<kp>,<ki>,<kd>  位移环 PID
 	case 'g':
 		cmd.id = CMD_POS_PID_SETTING;
 		if (len > 2 && data[1] == ':') {
@@ -256,8 +256,8 @@ static cmd_t parse_cmd(const uint8_t* data, uint16_t len)
 		}
 		break;
 
-	case 'E':  // F:<kp>,<ki>,<kd>  角度环 PID
-	case 'e':
+	case 'F':  // F:<kp>,<ki>,<kd>  角度环 PID
+	case 'f':
 		cmd.id = CMD_ANGLE_PID_SETTING;
 		if (len > 2 && data[1] == ':') {
 			const uint8_t* p = data + 2;
@@ -276,8 +276,8 @@ static cmd_t parse_cmd(const uint8_t* data, uint16_t len)
 		}
 		break;
 
-	case 'F':  // G:<kp>,<ki>,<kd>  角速度环 PID
-	case 'f':
+	case 'E':  // E:<kp>,<ki>,<kd>  角速度环 PID
+	case 'e':
 		cmd.id = CMD_ANGLE_VELOCITY_PID_SETTING;
 		if (len > 2 && data[1] == ':') {
 			const uint8_t* p = data + 2;
@@ -493,7 +493,7 @@ static void execute_cmd(const cmd_t* cmd)
 #endif
 
 	case CMD_POS_PID_SETTING: {
-		// E:<kp>,<ki>,<kd>  位移环
+		// G:<kp>,<ki>,<kd>  位移环
 		float kp = cmd->param3, ki = cmd->param4, kd = cmd->param5;
 		control_set_pid_x(kp, ki, kd);
 		char b1[16], b2[16], b3[16];
@@ -517,7 +517,7 @@ static void execute_cmd(const cmd_t* cmd)
 	}
 
 	case CMD_ANGLE_VELOCITY_PID_SETTING: {
-		// G:<kp>,<ki>,<kd>  角速度环
+		// E:<kp>,<ki>,<kd>  角速度环
 		float kp = cmd->param3, ki = cmd->param4, kd = cmd->param5;
 		control_set_pid_theta_dot(kp, ki, kd);
 		char b1[16], b2[16], b3[16];
