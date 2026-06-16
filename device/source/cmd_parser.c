@@ -84,9 +84,9 @@ void cmd_send_help(uart_base_t* uart)
 	SEND_STR("| T                		Start auto-tune (relay method)	|\r\n");
 	SEND_STR("| R                		Query auto-tune result		|\r\n");
 	SEND_STR("| X:<target>,<kp>,<ki>,<kd>	Set motor PID params + target	|\r\n");
-	SEND_STR("| E:<kp>,<ki>,<kd>		Set pos loop PID (PID_x)	|\r\n");
+	SEND_STR("| E:<kp>,<ki>,<kd>		Set angvel loop PID (PID_TD)	|\r\n");
 	SEND_STR("| F:<kp>,<ki>,<kd>		Set angle loop PID (PID_T)	|\r\n");
-	SEND_STR("| G:<kp>,<ki>,<kd>		Set angvel loop PID (PID_TD)	|\r\n");
+	SEND_STR("| G:<kp>,<ki>,<kd>		Set pos loop PID (PID_x)	|\r\n");
 	SEND_STR("| B:<0|1>			Enable/Disable balance ctrl	|\r\n");
 	SEND_STR("| N:<angle>			Set center angle (deg)		|\r\n");
 	SEND_STR("| D:<0|1>			Enable/Disable debug stream	|\r\n");
@@ -373,6 +373,11 @@ static void execute_cmd(const cmd_t* cmd)
 	}
 	// 请求停止命令
 	case CMD_STOP: {
+		control_set_enabled(0);
+		if (s_pendulum != NULL) {
+			s_pendulum->state = STATE_IDLE;
+			s_pendulum->push_active = 0;
+		}
 		device_err_t ret = step_motor_stop(s_motor);
 		if (ret == DRV_OK) {
 			send_ok();
