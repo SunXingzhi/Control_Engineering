@@ -350,6 +350,16 @@ device_err_t step_motor_set_speed(step_motor_t* motor, const float speed, motor_
 	if (target_freq>MAX_PWM_FREQUENCY_HZ) target_freq	= MAX_PWM_FREQUENCY_HZ;
 
 #if USE_MOTOR_PID_CONTROL==0
+	if (motor->step_motor_information.dir == dir
+	    && motor->ramp.freq_target == target_freq
+	    && motor->ramp.state != RAMP_IDLE
+	    && motor->ramp.state != RAMP_DONE){
+		// 同方向同频率重复设置时保持当前 ramp，避免主循环把加速过程反复清零。
+		return DRV_OK;
+	}
+#endif
+
+#if USE_MOTOR_PID_CONTROL==0
 	// 如果不使用闭环控制, 则需要设置
 	// 配置斜坡参数（ACCEL/DECEL 判断交给 start 根据 ramp 内部 freq 完成.
 	ramp_step_motor_set(&motor->ramp,
@@ -394,6 +404,7 @@ device_err_t step_motor_set_speed(step_motor_t* motor, const float speed, motor_
  * @param  angle: 旋转角度（°）
  * @retval device_err_t
  */
+
 device_err_t step_motor_move_angle(step_motor_t* motor,
                                    motor_direction_t dir,
                                    float angle)
@@ -437,6 +448,7 @@ device_err_t step_motor_move_angle(step_motor_t* motor,
  * @param  pulse_freq_hz: 目标脉冲频率 (Hz)
  * @retval device_err_t
  */
+
 device_err_t step_motor_set_pulse_freq(step_motor_t* motor, uint16_t pulse_freq_hz)
 {
 	if (motor == NULL) {
