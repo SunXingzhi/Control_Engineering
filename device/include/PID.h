@@ -36,6 +36,10 @@ typedef struct PID {
 	float LastError;
 	float Kp, Ki, Kd;
 	float OutputMax, OutputMin;
+	// 积分项限幅（量纲 = 误差 × 时间，与位置式 PID 的 SumError 一致）。
+	// 仅位置式 PID 使用，用于独立于输出限幅地约束积分累加量，避免抗饱和失效。
+	// 若两者 <= 0，pos_calc 会回退到一个保守的自动限幅（|Ki|·max_integral_time 的等效上限）。
+	float IntegralMax, IntegralMin;
 
 	// ---- 函数接口 ----
 	const PID_AlgoInterface_t* interface;  // 函数表

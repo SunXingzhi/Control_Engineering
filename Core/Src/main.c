@@ -202,12 +202,16 @@ int main(void)
 	uint32_t last_print_ms = 0;
 	while (1){
 		cmd_pendulum_loop();
-		// 控制器开始
-		CONTROL_proc();
-		// 更新读取角度
+
+		// 先更新传感器，再跑控制器 —— 保证 CONTROL_proc 和 pendulum_loop
+		// 用到的是"同一帧"的最新 total_angle/anglesensor，消除位置反馈滞后一拍。
 		angle_sensor_read_total_angle(&encoder, &total_angle);
-		// 更新摆杆角度传感器
+		pendulum.total_angle = total_angle;   // 同步给位置环（CONTROL_proc 内部读这个）
 		anglesensor = AngleSensor_GetAngle(&sensor1);
+		pendulum.pendulum_angle = anglesensor;
+
+		// 控制器开始（此时 total_angle 已是本帧最新值）
+		CONTROL_proc();
 
 		// 调试打印：每 200ms 输出一次角度传感器数据
 		uint32_t now_ms = HAL_GetTick();

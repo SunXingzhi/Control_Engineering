@@ -63,9 +63,25 @@ static float pos_calc(PID_t* pid, float actual)
 	/* 梯形积分 */
 	st->SumError += (err + st->prev_error) * deltaT * 0.5f;
 
-	/* 积分限幅 (抗饱和) */
-	if (st->SumError > pid->OutputMax) st->SumError = pid->OutputMax;
-	if (st->SumError < pid->OutputMin) st->SumError = pid->OutputMin;
+	/* 积分限幅 (抗饱和) —— 量纲为 误差×时间，独立于输出限幅 OutputMax/Min
+	 * BUG 修复: 原代码误用 OutputMax/OutputMin（其量纲是输出量，如 RPM 或 rad）
+	 *          去限幅 SumError（量纲是误差×时间），导致积分几乎永不饱和、抗饱和失效。
+	 * 若用户未显式设置 IntegralMax/Min（<=0），回退到一个保守的上限：
+	 *   使得积分项 Ki·SumError 不超过输出量程的 90%，即 |SumError| <= 0.9·|Output|/|Ki|。
+	 *   这样在 Ki 极小或为 0 时不会误伤（上限趋于无穷），Ki 较大时也能有效防饱和。 */
+	float imax = pid->IntegralMax;
+	float imin = pid->IntegralMin;
+	if (imax <= 0.0f || imin >= 0.0f) {
+		float ki = pid->Ki;
+		float ki_abs = (ki >= 0.0f) ? ki : -ki;
+		float out_abs = (pid->OutputMax >= 0.0f) ? pid->OutputMax : -pid->OutputMax;
+		if (out_abs < 1e-9f) out_abs = 420.0f;  /* 兜底，避免除零 */
+		float bound = (ki_abs > 1e-9f) ? (0.9f * out_abs / ki_abs) : 1e6f;
+		if (imax <= 0.0f)  imax = bound;
+		if (imin >= 0.0f)  imin = -bound;
+	}
+	if (st->SumError > imax) st->SumError = imax;
+	if (st->SumError < imin) st->SumError = imin;
 
 	/* 微分 (差分近似) */
 	st->DError = (err - st->prev_error) / deltaT;

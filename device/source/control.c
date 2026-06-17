@@ -28,6 +28,10 @@ const float		slide_table_safety_stroke	= 0.45f;	// 滑台安全行程(M)
 // 标定比例尺
 float position_scale	= 0.0f;		// 将磁编码器获取的total_angle,转成要的目标位置的比例尺
 
+// 控制器电机频率斜坡的当前值（文件级，便于停机时复位）
+// 若不复位，限位触发停机后再次 B:1 启用平衡控制时，电机会从上次频率值继续斜坡，产生冲击。
+static uint16_t control_current_freq = 0;
+
 // 外部变量
 extern AngleSensor	sensor1;
 extern mt6701_t		encoder;
@@ -73,18 +77,18 @@ static void control_set_motor(float rpm, motor_direction_t dir)
 	if (target_freq > 0 && target_freq < MIN_START_FREQ)
 		target_freq = MIN_START_FREQ;
 
-	static uint16_t current_freq = 0;
-	int16_t diff = (int16_t)target_freq - (int16_t)current_freq;
+	/* 斜率限制：每 5ms 周期最多变化 MOTOR_STEP_LENGTH_FREQUENCY_HZ，避免步进电机失步 */
+	int16_t diff = (int16_t)target_freq - (int16_t)control_current_freq;
 	int16_t max_step = MOTOR_STEP_LENGTH_FREQUENCY_HZ;
 	if (diff > max_step)       diff = max_step;
 	else if (diff < -max_step) diff = -max_step;
-	current_freq = (uint16_t)((int16_t)current_freq + diff);
+	control_current_freq = (uint16_t)((int16_t)control_current_freq + diff);
 
-	if (current_freq == 0) {
+	if (control_current_freq == 0) {
 		step_motor_pwm_off(&motor);
 	} else {
 		step_motor_set_direction(&motor, dir);
-		step_motor_set_pulse_freq(&motor, current_freq);
+		step_motor_set_pulse_freq(&motor, control_current_freq);
 		step_motor_start(&motor);
 	}
 }
@@ -96,12 +100,21 @@ void control_init()
 	// 参考：0.8 × angle_error → PWM
 	// 这里：Kp × angle_error → RPM
 	PID_init(&PID_theta, PID_POSITIONAL, NULL, 20.0f, 0.0f, 3.0f, +420.0f, -420.0f);
+	// 积分限幅：SumError 量纲为 rad·s。摆杆偏角最大 ~0.5rad，积分数秒封顶，
+	// 取 ±2.0 rad·s 使 Ki·SumError 不会单独把输出推到满量程，保留 P/D 的主导权。
+	PID_theta.IntegralMax =  2.0f;
+	PID_theta.IntegralMin = -2.0f;
 
 	// 角速度环（暂不使用，参考程序没有角速度环）
 	PID_init(&PID_theta_dot, PID_POSITIONAL, NULL, 0.0f, 0.0f, 0.0f, +50.0f, -50.0f);
+	PID_theta_dot.IntegralMax =  1.0f;
+	PID_theta_dot.IntegralMin = -1.0f;
 
 	// 位移环：输出角度偏移量（参考程序的关键设计）
 	PID_init(&PID_x, PID_POSITIONAL, NULL, 0.5f, 0.0f, 0.0f, +0.15f, -0.15f);
+	// 输出本身限幅 ±0.15rad，积分上限取 ±0.5 rad·s 防止位置环积分漂移吃掉角度环余量。
+	PID_x.IntegralMax =  0.5f;
+	PID_x.IntegralMin = -0.5f;
 }
 
 // 控制器进程
@@ -201,6 +214,9 @@ void control_reset()
 {
 	last_timeus = 0;
 	v_ref = 0.0f;
+
+	// 复位电机频率斜坡状态，使下次启用平衡控制时从 0 平滑起步，避免冲击
+	control_current_freq = 0;
 
 	PID_reset(&PID_theta);
 	PID_reset(&PID_theta_dot);
