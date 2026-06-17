@@ -125,7 +125,8 @@ void CONTROL_proc()
 	// Step 1: 读取传感器
 	// ============================================================
 	float theta = (AngleSensor_GetAngle(&sensor1) - center_angle) * 0.0174533f;
-	float theta_dot = AngleSensor_GetAngularVelocity(&sensor1) * 0.0174533f;
+	// 角速度环已移除（参考程序无此环），theta_dot 暂不使用；如需加阻尼项可重新启用
+	// float theta_dot = AngleSensor_GetAngularVelocity(&sensor1) * 0.0174533f;
 
 	// ============================================================
 	// Step 2: 位置环 — 输出角度偏移量（参考程序的核心策略）
@@ -145,19 +146,16 @@ void CONTROL_proc()
 	// ============================================================
 	// Step 3: 角度环 — 纯P控制（参考程序的策略）
 	// ============================================================
-	// 参考：v_out = 0.8 × (raw_angle - location - target_angle)
-	// 这里：output = Kp × (theta - pos_offset - 0)
-	//                = Kp × (theta - pos_offset)
-	// pos_offset 从 theta 中减去，相当于调整了角度零点
-	float angle_error = theta - pos_offset;
+	// 物理误差：摆杆偏离竖直的角度，正值=向一侧倾倒
+	// 注意 PID 内部 err = Target - actual，这里 Target=0、actual=(pos_offset - theta)，
+	// 因此 PID 内部 err = theta - pos_offset，符号与物理误差一致，
+	// 正 Kp 才能产生正确的负反馈方向（摆杆右倾 → 平台右移去接住）。
+	// pos_offset 从 theta 中减去，相当于调整角度环的目标零点（位置环的核心设计）。
+	float angle_error = pos_offset - theta;
 
-	// 角度环 PID（主要用 P 和 D）
+	// 角度环 PID（主要用 P 和 D），角速度环已移除（参考程序无此环）
 	PID_theta.Target = 0.0f;
 	float output = PID_calc(&PID_theta, angle_error);
-
-	// 角速度环（可选，提供额外阻尼）
-	PID_theta_dot.Target = output;
-	output = PID_calc(&PID_theta_dot, theta_dot);
 
 	// ============================================================
 	// Step 4: 死区补偿 + 输出限幅
