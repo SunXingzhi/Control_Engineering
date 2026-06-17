@@ -101,6 +101,9 @@ static void do_calibration(pendulum_ctx_t* ctx)
 				printf("CALIB: right = %s, seeking left...\r\n", ftoa_lite(bf, total_angle, 2));
 			}
 		}
+		g_limit_right_flag = 0;     // ← 新增：清除右限位标志
+		g_limit_left_flag = 0;      // ← 新增：清除左限位标志
+		ctx->limit_tripped = 0;     // ← 新增：清除限位触发状态
 		break;
 
 	case 1: /* 反转中 (NEGATIVE_DIR，平台左移)，检测左限位 (PA12) */
@@ -131,6 +134,9 @@ static void do_calibration(pendulum_ctx_t* ctx)
 								position_scale);
 
 		}
+		g_limit_left_flag = 0;      // ← 新增：清除左限位标志
+		g_limit_right_flag = 0;     // ← 新增：清除右限位标志
+		ctx->limit_tripped = 0;     // ← 新增：清除限位触发状态
 		break;
 
 	case 2: /* 新增：移动到中点 */
